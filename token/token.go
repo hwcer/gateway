@@ -13,19 +13,19 @@ import (
 )
 
 type Token struct {
-	Guid      string `json:"openid"`
+	Guid      string `json:"guid"`
 	Appid     string `json:"appid"`
 	Expire    int64  `json:"expire"`
 	Developer bool   `json:"developer"`
 }
 
-type Authorize struct {
+type Args struct {
 	Guid   string `json:"guid"`
 	Access string `json:"access"`
 	Secret string `json:"secret"`
 }
 
-func (this *Authorize) Verify() (r *Token, err error) {
+func (this *Args) Verify() (r *Token, err error) {
 	r = &Token{}
 	//是否开启GM
 	if this.Secret != "" {
@@ -75,7 +75,7 @@ func (this *Authorize) Verify() (r *Token, err error) {
 }
 
 // 综合验证函数
-func (this *Authorize) validateAccountComprehensive(account string) error {
+func (this *Args) validateAccountComprehensive(account string) error {
 	// 检查是否只包含允许的字符（可选）
 	pattern := `^[a-zA-Z0-9~!@#$%^&*()_+\-=\[\]\\{}|;':",./<>?]{2,64}$`
 	matched, _ := regexp.MatchString(pattern, account)

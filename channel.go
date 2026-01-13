@@ -3,13 +3,13 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"server/gwcfg"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/logger"
 	"github.com/hwcer/yyds/modules/gateway/channel"
 	"github.com/hwcer/yyds/modules/gateway/players"
-	"github.com/hwcer/yyds/options"
 )
 
 func init() {
@@ -37,8 +37,8 @@ func (this channelHandle) parse(s string) (k, v string, err error) {
 	return
 }
 func (this channelHandle) Broadcast(c *cosrpc.Context) any {
-	path := c.GetMetadata(options.ServiceMessagePath)
-	s := c.GetMetadata(options.ServiceMessageRoom)
+	path := c.GetMetadata(gwcfg.ServiceMessagePath)
+	s := c.GetMetadata(gwcfg.ServiceMessageRoom)
 	if s == "" {
 		logger.Debug("频道名不能为空")
 		return nil
@@ -61,7 +61,7 @@ func (this channelHandle) Broadcast(c *cosrpc.Context) any {
 
 // Delete 删除一个频道,如果path不为空，先使用path广播再删除
 func (this channelHandle) Delete(c *cosrpc.Context) any {
-	s := c.GetMetadata(options.ServiceMessageRoom)
+	s := c.GetMetadata(gwcfg.ServiceMessageRoom)
 	if s == "" {
 		logger.Debug("频道名不能为空")
 		return nil
@@ -76,7 +76,7 @@ func (this channelHandle) Delete(c *cosrpc.Context) any {
 		return nil
 	}
 
-	if path := c.GetMetadata(options.ServiceMessagePath); path != "" {
+	if path := c.GetMetadata(gwcfg.ServiceMessagePath); path != "" {
 		room.Broadcast(path, c.Bytes())
 		logger.Debug("频道广播 name:%s  path:%s", s, path)
 	}

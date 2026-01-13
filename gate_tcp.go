@@ -41,12 +41,12 @@ func (this *TcpServer) init() error {
 	service := cosnet.Service()
 	_ = service.Register(this.proxy, "*")
 	_ = service.Register(this.C2SPing, "ping")
-	_ = service.Register(this.C2SOAuth, Options.C2SOAuth)
+	_ = service.Register(this.C2SOAuth, Setting.C2SOAuth)
 	_ = service.Register(this.C2SReconnect, "C2SReconnect")
 
 	h := service.Handler().(*cosnet.Handler)
 	h.SetSerialize(func(c *cosnet.Context, reply any) ([]byte, error) {
-		return Options.Serialize(c, reply)
+		return Setting.Serialize(c, reply)
 	})
 	return nil
 }
@@ -108,8 +108,8 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	ss := session.New(data)
 	if token, err := ss.Token(); err != nil {
 		sock.Errorf(err)
-	} else if Options.S2CSecret != nil {
-		Options.S2CSecret(sock, token)
+	} else if Setting.S2CSecret != nil {
+		Setting.S2CSecret(sock, token)
 	} else {
 		sock.Send(0, "S2CSecret", []byte(token))
 	}
@@ -125,8 +125,8 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if !ok {
 		return
 	}
-	if Options.S2CReplaced != nil {
-		Options.S2CReplaced(sock, ip)
+	if Setting.S2CReplaced != nil {
+		Setting.S2CReplaced(sock, ip)
 	} else {
 		sock.Send(0, "S2CReplaced", []byte(ip))
 	}
@@ -163,6 +163,11 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 
 type socketProxy struct {
 	*cosnet.Context
+}
+
+func (this *socketProxy) Verify() (*session.Data, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (this *socketProxy) Path() (string, error) {

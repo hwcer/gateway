@@ -45,12 +45,12 @@ func (this *HttpServer) init() (err error) {
 	allow.Methods(Method...)
 	allow.Headers(strings.Join(Headers, ","))
 	this.Server.Use(allow.Handle)
-	this.Server.Register(Options.C2SOAuth, this.oauth)
+	this.Server.Register(Setting.C2SOAuth, this.oauth)
 	this.Server.Register("*", this.proxy, http.MethodPost)
 	service := this.Server.Service()
 	h := service.Handler().(*cosweb.Handler)
 	h.SetSerialize(func(c *cosweb.Context, reply interface{}) ([]byte, error) {
-		return Options.Serialize(c, reply)
+		return Setting.Serialize(c, reply)
 	})
 
 	if options.Gate.Static != nil && options.Gate.Static.Root != "" {
@@ -139,6 +139,11 @@ type httpProxy struct {
 	metadata values.Metadata
 }
 
+func (this *httpProxy) Verify() (*session.Data, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (this *httpProxy) Path() (string, error) {
 	return this.Context.Request.URL.Path, nil
 }
@@ -157,7 +162,7 @@ func (this *httpProxy) Login(guid string, value values.Values) (token string, er
 	header := this.Header()
 	header.Set("X-Forwarded-Key", session.Options.Name)
 	header.Set("X-Forwarded-Val", cookie.Value)
-	//this.Context.Set(session.Options.Name, cookie.Value)
+	//this.Context.Set(session.Setting.Name, cookie.Value)
 	this.cookie = cookie
 
 	return
@@ -168,6 +173,9 @@ func (this *httpProxy) Logout() error {
 }
 
 func (this *httpProxy) Cookie() (*session.Data, error) {
+	if this.Context.Session != nil && this.Context.Session.Data != nil {
+		return this.Context.Session.Data, nil
+	}
 	var token string
 	if this.cookie != nil {
 		token = this.cookie.Value

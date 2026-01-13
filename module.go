@@ -3,6 +3,7 @@ package gateway
 import (
 	"errors"
 	"net"
+	"server/gwcfg"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ type Module struct {
 }
 
 func (this *Module) Id() string {
-	return options.ServiceTypeGate
+	return gwcfg.ServiceName
 }
 
 func (this *Module) Init() (err error) {

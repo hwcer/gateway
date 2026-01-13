@@ -7,10 +7,6 @@ import (
 	"github.com/hwcer/cosgo/values"
 )
 
-const (
-	SessionPlayerSocketName = "player.sock"
-)
-
 var players = sync.Map{}
 
 func Get(uuid string) *session.Data {

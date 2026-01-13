@@ -8,6 +8,10 @@ import (
 	"github.com/hwcer/cosnet"
 )
 
+const (
+	SessionPlayerSocketName = "player.sock"
+)
+
 func Socket(p *session.Data) *cosnet.Socket {
 	i := p.Get(SessionPlayerSocketName)
 	if i == nil {

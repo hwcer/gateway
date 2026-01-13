@@ -75,8 +75,8 @@ func send(c *cosrpc.Context) any {
 		return nil
 	}
 	path := c.GetMetadata(options.ServiceMessagePath)
-	if Options.Response != nil {
-		Options.Response(p, path, mate)
+	if Setting.Response != nil {
+		Setting.Response(p, path, mate)
 	}
 	sock := players.Socket(p)
 	if sock == nil {

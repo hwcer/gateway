@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"fmt"
+	"server/gwcfg"
 
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/session"
@@ -13,30 +14,13 @@ import (
 	"github.com/hwcer/yyds/options"
 )
 
-type Request interface {
-	Path() (string, error)
-	Login(guid string, value values.Values) (string, error) //登录
-	Logout() error                                          //退出登录
-	Cookie() (*session.Data, error)                         //当前登录信息
-	Buffer() (buf *bytes.Buffer, err error)
-	Metadata() values.Metadata
-	RemoteAddr() string
-}
-
-func oauth(h Request) (any, error) {
-	if Options.G2SOAuth == "" {
-		return true, nil
-	}
-	return caller(h, Options.G2SOAuth)
-}
-
-func caller(h Request, path string) (reply []byte, err error) {
+func proxy(h Context, path string) (reply []byte, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("%v", e)
 		}
-		if err != nil && Options.Errorf != nil {
-			reply = Options.Errorf(err)
+		if err != nil && Setting.Errorf != nil {
+			reply = Setting.Errorf(err)
 			err = nil
 		}
 	}()
@@ -44,14 +28,14 @@ func caller(h Request, path string) (reply []byte, err error) {
 	res := make(values.Metadata)
 	var p *session.Data
 	var servicePath, serviceMethod string
-	servicePath, serviceMethod, err = Options.Router(path, req)
+	servicePath, serviceMethod, err = Setting.Router(path, req)
 	if err != nil {
 		return nil, err
 	}
 
 	l, s := options.OAuth.Get(servicePath, serviceMethod)
 	isMaster := options.OAuth.IsMaster(s)
-	if f, ok := Access.dict[l]; !ok {
+	if f, ok := gwcfg.Access.dict[l]; !ok {
 		return nil, fmt.Errorf("unknown authorization type: %d", l)
 	} else if p, err = f(h, req, isMaster); err != nil {
 		return nil, err
@@ -68,15 +52,15 @@ func caller(h Request, path string) (reply []byte, err error) {
 		return nil, err
 	}
 	//验证BODY有效性
-	if Options.Validate != nil {
-		if err = Options.Validate(p, l, s, req, buff.Bytes()); err != nil {
+	if Setting.Validate != nil {
+		if err = Setting.Validate(p, l, s, req, buff.Bytes()); err != nil {
 			return nil, err
 		}
 	}
 	reply = make([]byte, 0)
 
-	if Options.Request != nil {
-		Options.Request(p, s, req)
+	if Setting.Request != nil {
+		Setting.Request(p, s, req)
 	}
 
 	if options.Gate.Prefix != "" {
@@ -96,8 +80,8 @@ func caller(h Request, path string) (reply []byte, err error) {
 			return nil, err
 		}
 		p = players.Get(guid)
-		if Options.Access != nil {
-			reply = Options.Access(p, token, reply)
+		if Setting.Access != nil {
+			reply = Setting.Access(p, token, reply)
 		}
 	}
 	//退出登录
