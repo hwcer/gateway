@@ -1,17 +1,18 @@
-package gateway
+package token
 
 import (
 	"encoding/json"
 	"fmt"
+	"gateway/errors"
+	"gateway/gwcfg"
 	"regexp"
 	"time"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/utils"
-	"github.com/hwcer/yyds/errors"
-	"github.com/hwcer/yyds/options"
 )
 
+// 默认的 认证方式
 type Token struct {
 	Guid      string `json:"guid"`
 	Appid     string `json:"appid"`
@@ -27,17 +28,17 @@ type Args struct {
 
 func (this *Args) Verify() (r *Token, err error) {
 	r = &Token{}
-	//是否开启GM
+	//是否开启 GM
 	if this.Secret != "" {
-		if options.Options.Developer == "" {
-			return nil, errors.New("GM commands are disabled")
+		if gwcfg.Developer == "" {
+			return nil, fmt.Errorf("GM commands are disabled")
 		}
-		if this.Secret != options.Options.Developer {
-			return nil, errors.New("GM commands error")
+		if this.Secret != gwcfg.Developer {
+			return nil, fmt.Errorf("GM commands error")
 		}
 		r.Developer = true
 	}
-	//GM模式允许快速登录
+	//GM 模式允许快速登录
 	if this.Guid != "" && r.Developer {
 		if err = this.validateAccountComprehensive(this.Guid); err != nil {
 			return
@@ -49,11 +50,11 @@ func (this *Args) Verify() (r *Token, err error) {
 	if this.Access == "" {
 		return nil, session.ErrorSessionEmpty
 	}
-	if options.Options.Secret == "" {
+	if gwcfg.Secret == "" {
 		return nil, session.Errorf("Options.Secret is empty")
 	}
 	var s string
-	if s, err = utils.Crypto.GCMDecrypt(this.Access, options.Options.Secret, nil); err != nil {
+	if s, err = utils.Crypto.GCMDecrypt(this.Access, gwcfg.Secret, nil); err != nil {
 		return nil, session.Errorf(err)
 	}
 	if err = json.Unmarshal([]byte(s), r); err != nil {
@@ -65,10 +66,10 @@ func (this *Args) Verify() (r *Token, err error) {
 	if r.Expire > 0 && r.Expire < time.Now().Unix() {
 		return nil, session.ErrorSessionExpired
 	}
-	if r.Appid != options.Options.Appid {
+	if r.Appid != gwcfg.Appid {
 		return nil, session.Errorf("access appid error")
 	}
-	if options.Options.Maintenance && !r.Developer {
+	if gwcfg.Maintenance && !r.Developer {
 		return nil, errors.ErrServerMaintenance
 	}
 	return

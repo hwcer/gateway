@@ -3,7 +3,9 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
-	"server/gwcfg"
+	"gateway/channel"
+	"gateway/gwcfg"
+	"gateway/players"
 	"strings"
 
 	"github.com/hwcer/cosgo"
@@ -12,21 +14,10 @@ import (
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
-	"github.com/hwcer/yyds/modules/gateway/channel"
-	"github.com/hwcer/yyds/modules/gateway/players"
-	"github.com/hwcer/yyds/options"
 )
 
 func init() {
 	cosgo.On(cosgo.EventTypStarted, func() error {
-		//设置登录权限
-		//if Setting.G2SOAuth != "" {
-		//	servicePath, serviceMethod, err := Setting.Router(Setting.G2SOAuth, nil)
-		//	if err != nil {
-		//		return err
-		//	}
-		//	options.OAuth.Set(servicePath, serviceMethod, options.OAuthTypeOAuth)
-		//}
 		//监控登录信息
 		session.OnRelease(func(data *session.Data) {
 			_ = players.Delete(data)
@@ -84,9 +75,9 @@ func defaultRequest(p *session.Data, path string, req values.Metadata, args []by
 
 func defaultResponse(p *session.Data, path string, res values.Metadata, data []byte) ([]byte, error) {
 	rt := res.GetString(gwcfg.ServiceMetadataResponseType)
-	if rt == gwcfg.ResponseTypeRecv && p != nil {
+	if rt == gwcfg.ResponseTypeReceived && p != nil {
 		i := p.Atomic()
-		res[options.ServiceMetadataRequestId] = fmt.Sprintf("%d", -i)
+		res[gwcfg.ServiceMetadataRequestKey] = fmt.Sprintf("%d", -i)
 	}
 	return data, nil
 }

@@ -2,6 +2,8 @@ package gwcfg
 
 import (
 	"strings"
+
+	"github.com/hwcer/cosgo/binder"
 )
 
 const (
@@ -33,9 +35,18 @@ func (p protocol) CMux() bool {
 	return v > 1
 }
 
+var Binder binder.Binder = binder.Json
+
+var (
+	Appid       string //程序名称
+	Secret      string //平台秘钥
+	Developer   string //开发者模式秘钥
+	Maintenance bool   //进入维护模式，仅仅开发人员允许进入
+)
+
 var Options = struct {
 	Redis     string   `json:"redis"`     //使用redis存储session，开启长连接时，请不要使用redis存储session
-	Static    Static   `json:"static"`    //静态服务器
+	Static    *Static  `json:"static"`    //静态服务器
 	Prefix    string   `json:"prefix"`    //路由强制前缀
 	Address   string   `json:"address"`   //连接地址
 	Capacity  int      `json:"capacity"`  //session默认分配大小，

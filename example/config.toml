@@ -1,9 +1,9 @@
 #程序中所有参数都可以在这里配置并覆盖默认配置
 #参数列表可以在命令行模式下使用 -h 参数启动查看
 debug=true
-appid="gate"              #服务器APPID,MASTAR中创建的游戏ID
-developer="123456"
-#pid="pid"            #生产环境创建pid目录，并打开这个
+appid="gate"                #服务器APPID,MASTAR中创建的游戏ID
+developer="123456"          #开发者模式密码
+#pid="pid"                  #生产环境创建pid目录，并打开这个
 logs.level=0               #日志等级
 #logs.path=""              #日志路径
 [rpcx]
@@ -11,7 +11,7 @@ logs.level=0               #日志等级
 address="127.0.0.1:8100"  #RPC服务地址,一般使用默认值,使用内网IP
 #################以下配置按服务器取舍#######################
 [gate]
-address=":8000"
+address=":80"
 protocol=7    #1-websocket，2-长连接，4-短链接
 static.root="wwwroot"
 static.route="ui"
@@ -22,4 +22,3 @@ static.index="index.html"
 #discovery ：服务器发现,必须配置rpcx.redis
 [service]
 game="local"
-locator="local"

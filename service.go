@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"gateway/gwcfg"
+	"gateway/players"
 	"strconv"
 	"strings"
 
@@ -9,11 +11,9 @@ import (
 	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/cosrpc/server"
 	"github.com/hwcer/logger"
-	"github.com/hwcer/yyds/modules/gateway/players"
-	"github.com/hwcer/yyds/options"
 )
 
-var Service = server.Service(options.ServiceTypeGate)
+var Service = server.Service(gwcfg.ServiceName)
 
 func init() {
 	Register(send)
@@ -30,11 +30,11 @@ func Register(i any, prefix ...string) {
 
 // 仅仅 在登录接口本身 需要提前对SOCKET发送信息时使用
 func write(c *cosrpc.Context) any {
-	id := c.GetMetadata(options.ServiceSocketId)
+	id := c.GetMetadata(gwcfg.ServiceMetadataSocketId)
 	if id == "" {
 		return c.Error("socket id not found")
 	}
-	path := c.GetMetadata(options.ServiceMessagePath)
+	path := c.GetMetadata(gwcfg.ServiceMessagePath)
 	i, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		logger.Debug("Socket id error,消息丢弃,Socket:%s PATH:%s ", id, path)
@@ -54,8 +54,8 @@ func write(c *cosrpc.Context) any {
 
 // send 消息推送
 func send(c *cosrpc.Context) any {
-	uid := c.GetMetadata(options.ServiceMetadataUID)
-	guid := c.GetMetadata(options.ServiceMetadataGUID)
+	uid := c.GetMetadata(gwcfg.ServiceMetadataUID)
+	guid := c.GetMetadata(gwcfg.ServiceMetadataGUID)
 
 	p := players.Get(guid)
 	if p == nil {
@@ -63,21 +63,19 @@ func send(c *cosrpc.Context) any {
 		return nil
 	}
 	if uid != "" {
-		if id := p.GetString(options.ServiceMetadataUID); id != "" && id != uid {
+		if id := p.GetString(gwcfg.ServiceMetadataUID); id != "" && id != uid {
 			logger.Debug("用户UID不匹配,UID:%s GUID:%s", uid, guid)
 			return nil
 		}
 	}
 
 	mate := c.Metadata()
-	if _, ok := mate[options.ServicePlayerLogout]; ok {
+	if _, ok := mate[gwcfg.ServicePlayerLogout]; ok {
 		players.Delete(p)
 		return nil
 	}
-	path := c.GetMetadata(options.ServiceMessagePath)
-	if Setting.Response != nil {
-		Setting.Response(p, path, mate)
-	}
+	path := c.GetMetadata(gwcfg.ServiceMessagePath)
+
 	sock := players.Socket(p)
 	if sock == nil {
 		logger.Debug("长链接不在线,消息丢弃,UID:%s GUID:%s PATH:%s ", uid, guid, path)
@@ -87,22 +85,28 @@ func send(c *cosrpc.Context) any {
 	if len(path) == 0 {
 		return nil //仅仅设置信息，不需要发送
 	}
+	mate[gwcfg.ServiceMetadataResponseType] = gwcfg.ResponseTypeReceived
+	body, err := Setting.Response(p, path, mate, c.Bytes())
+	if err != nil {
+		return err
+	}
+
 	var rid int32
-	if s, ok := mate[options.ServiceMetadataRequestId]; ok {
+	if s, ok := mate[gwcfg.ServiceMetadataRequestKey]; ok {
 		i, _ := strconv.Atoi(s)
 		rid = int32(i)
 	}
 	//logger.Debug("推送消息  GUID:%s RID:%d PATH:%s", guid, rid, path)
-	sock.Send(rid, path, c.Bytes())
+	sock.Send(rid, path, body)
 	return nil
 }
 
 // broadcast 全服广播
 func broadcast(c *cosrpc.Context) any {
-	path := c.GetMetadata(options.ServiceMessagePath)
+	path := c.GetMetadata(gwcfg.ServiceMessagePath)
 	//logger.Debug("广播消息:%v", path)
 	//mate := c.Metadata()
-	ignore := c.GetMetadata(options.ServiceMessageIgnore)
+	ignore := c.GetMetadata(gwcfg.ServiceMessageIgnore)
 	ignoreMap := make(map[string]struct{})
 	if ignore != "" {
 		arr := strings.Split(ignore, ",")
@@ -112,7 +116,7 @@ func broadcast(c *cosrpc.Context) any {
 	}
 
 	players.Range(func(p *session.Data) bool {
-		uid := p.GetString(options.ServiceMetadataUID)
+		uid := p.GetString(gwcfg.ServiceMetadataUID)
 		if _, ok := ignoreMap[uid]; ok {
 			return true
 		}

@@ -2,6 +2,9 @@ package gateway
 
 import (
 	"encoding/json"
+	"gateway/gwcfg"
+	"gateway/players"
+	"gateway/token"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,8 +17,6 @@ import (
 	"github.com/hwcer/cosweb"
 	"github.com/hwcer/cosweb/middleware"
 	"github.com/hwcer/logger"
-	"github.com/hwcer/yyds/modules/gateway/players"
-	"github.com/hwcer/yyds/options"
 )
 
 var ElapsedMillisecond = 200 * time.Millisecond
@@ -49,67 +50,64 @@ func (this *HttpServer) init() (err error) {
 	this.Server.Register("*", this.proxy, http.MethodPost)
 	service := this.Server.Service()
 	h := service.Handler().(*cosweb.Handler)
-	h.SetSerialize(func(c *cosweb.Context, reply interface{}) ([]byte, error) {
-		return Setting.Serialize(c, reply)
-	})
+	h.SetSerialize(this.serialize)
 
-	if options.Gate.Static != nil && options.Gate.Static.Root != "" {
-		static := this.Server.Static(options.Gate.Static.Route, options.Gate.Static.Root, http.MethodGet)
-		if options.Gate.Static.Index != "" {
-			static.Index(options.Gate.Static.Index)
+	if gwcfg.Options.Static != nil && gwcfg.Options.Static.Root != "" {
+		static := this.Server.Static(gwcfg.Options.Static.Route, gwcfg.Options.Static.Root, http.MethodGet)
+		if gwcfg.Options.Static.Index != "" {
+			static.Index(gwcfg.Options.Static.Index)
 		}
 	}
 	return nil
 }
-
+func (this *HttpServer) serialize(c *cosweb.Context, reply any) ([]byte, error) {
+	return Setting.Serialize(c, reply)
+}
 func (this *HttpServer) Listen(address string) (err error) {
-	if options.Gate.KeyFile != "" && options.Gate.CertFile != "" {
-		err = this.Server.TLS(address, options.Gate.CertFile, options.Gate.KeyFile)
+	if gwcfg.Options.KeyFile != "" && gwcfg.Options.CertFile != "" {
+		err = this.Server.TLS(address, gwcfg.Options.CertFile, gwcfg.Options.KeyFile)
 	} else {
 		err = this.Server.Listen(address)
 	}
 	if err == nil {
-		logger.Trace("网关短连接启动：%v", options.Gate.Address)
+		logger.Trace("网关短连接启动：%v", gwcfg.Options.Address)
 	}
 	return
 }
 func (this *HttpServer) Accept(ln net.Listener) (err error) {
-	if options.Gate.KeyFile != "" && options.Gate.CertFile != "" {
-		err = this.Server.TLS(ln, options.Gate.CertFile, options.Gate.KeyFile)
+	if gwcfg.Options.KeyFile != "" && gwcfg.Options.CertFile != "" {
+		err = this.Server.TLS(ln, gwcfg.Options.CertFile, gwcfg.Options.KeyFile)
 	} else {
 		err = this.Server.Accept(ln)
 	}
 	if err == nil {
-		logger.Trace("网关短连接启动：%v", options.Gate.Address)
+		logger.Trace("网关短连接启动：%v", gwcfg.Options.Address)
 	}
 	return
 }
 func (this *HttpServer) oauth(c *cosweb.Context) any {
-	authorize := &Authorize{}
-	if err := c.Bind(&authorize); err != nil {
+	args := &token.Args{}
+	if err := c.Bind(&args); err != nil {
 		return err
 	}
-	token, err := authorize.Verify()
+	data, err := args.Verify()
 	if err != nil {
 		return err
 	}
 	h := httpProxy{Context: c}
 	vs := values.Values{}
-	if token.Developer {
-		vs.Set(options.ServiceMetadataDeveloper, "1")
+	if data.Developer {
+		vs.Set(gwcfg.ServiceMetadataDeveloper, "1")
 	} else {
-		vs.Set(options.ServiceMetadataDeveloper, "")
+		vs.Set(gwcfg.ServiceMetadataDeveloper, "")
 	}
-	if _, err = h.Login(token.Guid, vs); err != nil {
+	reply := map[string]interface{}{}
+	reply["key"] = session.Options.Name
+	if reply["val"], err = h.Login(data.Guid, vs); err != nil {
 		return err
 	}
 
-	var v any
-	v, err = oauth(&h)
-	if err != nil {
-		return err
-	}
-	return v
+	return reply
 }
 
 func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
@@ -121,12 +119,8 @@ func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 		}
 	}()
 	h := &httpProxy{Context: c}
-	p, err := h.Path()
+	reply, err := proxy(h)
 	if err != nil {
-		return err
-	}
-	var reply []byte
-	if reply, err = caller(h, p); err != nil {
 		return err
 	}
 	return reply
@@ -137,11 +131,6 @@ type httpProxy struct {
 	uri      *url.URL
 	cookie   *http.Cookie
 	metadata values.Metadata
-}
-
-func (this *httpProxy) Verify() (*session.Data, error) {
-	//TODO implement me
-	panic("implement me")
 }
 
 func (this *httpProxy) Path() (string, error) {
@@ -172,20 +161,20 @@ func (this *httpProxy) Logout() error {
 	return this.Context.Session.Delete()
 }
 
-func (this *httpProxy) Cookie() (*session.Data, error) {
+func (this *httpProxy) Verify() (*session.Data, error) {
 	if this.Context.Session != nil && this.Context.Session.Data != nil {
 		return this.Context.Session.Data, nil
 	}
-	var token string
+	var s string
 	if this.cookie != nil {
-		token = this.cookie.Value
+		s = this.cookie.Value
 	} else {
-		token = this.Context.GetString(session.Options.Name, cosweb.RequestDataTypeCookie, cosweb.RequestDataTypeQuery, cosweb.RequestDataTypeHeader)
+		s = this.Context.GetString(session.Options.Name, cosweb.RequestDataTypeCookie, cosweb.RequestDataTypeQuery, cosweb.RequestDataTypeHeader)
 	}
-	if token == "" {
+	if s == "" {
 		return nil, values.Error("token empty")
 	}
-	if err := this.Context.Session.Verify(token); err != nil {
+	if err := this.Context.Session.Verify(s); err != nil {
 		return nil, err
 	}
 	return this.Context.Session.Data, nil
@@ -203,7 +192,7 @@ func (this *httpProxy) Metadata() values.Metadata {
 	if t := this.getContentType(binder.HeaderContentType, ";"); t != "" {
 		this.metadata.Set(binder.HeaderContentType, t)
 	} else {
-		this.metadata.Set(binder.HeaderContentType, options.Options.Binder)
+		this.metadata.Set(binder.HeaderContentType, gwcfg.Binder)
 	}
 	if t := this.getContentType(binder.HeaderAccept, ","); t != "" {
 		this.metadata.Set(binder.HeaderAccept, t)
@@ -211,7 +200,7 @@ func (this *httpProxy) Metadata() values.Metadata {
 	if this.cookie != nil {
 		cookie := map[string]string{"name": session.Options.Name, "value": this.cookie.Value}
 		b, _ := json.Marshal(cookie)
-		this.metadata.Set(options.ServiceMetadataCookie, string(b))
+		this.metadata.Set(gwcfg.ServiceMetadataCookie, string(b))
 	}
 	return this.metadata
 }

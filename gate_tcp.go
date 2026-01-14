@@ -3,6 +3,10 @@ package gateway
 import (
 	"bytes"
 	"fmt"
+	"gateway/errors"
+	"gateway/gwcfg"
+	"gateway/players"
+	"gateway/token"
 	"net"
 	"net/url"
 	"strconv"
@@ -15,9 +19,6 @@ import (
 	"github.com/hwcer/cosnet"
 	"github.com/hwcer/cosnet/tcp"
 	"github.com/hwcer/logger"
-	"github.com/hwcer/yyds/errors"
-	"github.com/hwcer/yyds/modules/gateway/players"
-	"github.com/hwcer/yyds/options"
 )
 
 func NewTCPServer() *TcpServer {
@@ -45,23 +46,23 @@ func (this *TcpServer) init() error {
 	_ = service.Register(this.C2SReconnect, "C2SReconnect")
 
 	h := service.Handler().(*cosnet.Handler)
-	h.SetSerialize(func(c *cosnet.Context, reply any) ([]byte, error) {
-		return Setting.Serialize(c, reply)
-	})
+	h.SetSerialize(this.serialize)
 	return nil
 }
-
+func (this *TcpServer) serialize(c *cosnet.Context, reply any) ([]byte, error) {
+	return Setting.Serialize(c, reply)
+}
 func (this *TcpServer) Listen(address string) error {
 	_, err := cosnet.Listen(address)
 	if err == nil {
-		logger.Trace("网关长连接启动：%v", options.Gate.Address)
+		logger.Trace("网关长连接启动：%v", gwcfg.Options.Address)
 	}
 	return err
 }
 
 func (this *TcpServer) Accept(ln net.Listener) error {
 	cosnet.Accept(&tcp.Listener{Listener: ln})
-	logger.Trace("网关长连接启动：%v", options.Gate.Address)
+	logger.Trace("网关长连接启动：%v", gwcfg.Options.Address)
 	return nil
 }
 
@@ -73,29 +74,26 @@ func (this *TcpServer) C2SPing(c *cosnet.Context) any {
 
 func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	var err error
-	authorize := &Authorize{}
-	if err = c.Bind(&authorize); err != nil {
+	args := &token.Args{}
+	if err = c.Bind(&args); err != nil {
 		return err
 	}
-	token, err := authorize.Verify()
+	data, err := args.Verify()
 	if err != nil {
 		return err
 	}
 	h := socketProxy{Context: c}
 	vs := values.Values{}
-	if token.Developer {
-		vs.Set(options.ServiceMetadataDeveloper, "1")
+	if data.Developer {
+		vs.Set(gwcfg.ServiceMetadataDeveloper, "1")
 	} else {
-		vs.Set(options.ServiceMetadataDeveloper, "")
+		vs.Set(gwcfg.ServiceMetadataDeveloper, "")
 	}
-	if _, err = h.Login(token.Guid, vs); err != nil {
+	if _, err = h.Login(data.Guid, vs); err != nil {
 		return err
 	}
-	var r any
-	if r, err = oauth(&h); err != nil {
-		return err
-	}
-	return r
+
+	return nil
 }
 
 // S2CSecret  默认的发送断线重连密钥
@@ -106,12 +104,12 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 		return
 	}
 	ss := session.New(data)
-	if token, err := ss.Token(); err != nil {
+	if s, err := ss.Token(); err != nil {
 		sock.Errorf(err)
 	} else if Setting.S2CSecret != nil {
-		Setting.S2CSecret(sock, token)
+		Setting.S2CSecret(sock, s)
 	} else {
-		sock.Send(0, "S2CSecret", []byte(token))
+		sock.Send(0, "S2CSecret", []byte(s))
 	}
 	return
 }
@@ -148,17 +146,20 @@ func (this *TcpServer) Disconnect(sock *cosnet.Socket, _ any) {
 }
 
 func (this *TcpServer) proxy(c *cosnet.Context) any {
+	startTime := time.Now()
+	defer func() {
+		if elapsed := time.Since(startTime); elapsed > ElapsedMillisecond {
+			path, _, _ := c.Path()
+			body := c.Message.Body()
+			logger.Alert("发现高延时请求,TIME:%v,PATH:%v,BODY:%v", elapsed, path, string(body))
+		}
+	}()
 	h := &socketProxy{Context: c}
-	p, err := h.Path()
+	reply, err := proxy(h)
 	if err != nil {
 		return err
 	}
-	var b []byte
-	if b, err = caller(h, p); err != nil {
-		return err
-	} else {
-		return b
-	}
+	return reply
 }
 
 type socketProxy struct {
@@ -186,7 +187,7 @@ func (this *socketProxy) Login(guid string, value values.Values) (token string, 
 	data := this.Context.Socket.Data()
 	if data != nil {
 		if data.UUID() != guid {
-			return "", errors.New("please do not login again")
+			return "", fmt.Errorf("please do not login again")
 		}
 	} else if data, err = players.Connect(this.Context.Socket, guid, value); err != nil {
 		return
@@ -218,7 +219,7 @@ func (this *socketProxy) Metadata() values.Metadata {
 	}
 	magic := this.Message.Magic()
 	meta[binder.HeaderContentType] = magic.Binder.Name()
-	meta[options.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
+	meta[gwcfg.ServiceMetadataRequestKey] = fmt.Sprintf("%d", this.Context.Message.Index())
 	return meta
 }
 

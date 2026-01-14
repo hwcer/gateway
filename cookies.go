@@ -1,48 +1,24 @@
 package gateway
 
 import (
-	"server/gwcfg"
+	"gateway/channel"
+	"gateway/gwcfg"
 	"strings"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
-	"github.com/hwcer/yyds/modules/gateway/channel"
 )
-
-var cookiesAllowableName = map[string]struct{}{}
-
-func SetCookieName(k string) {
-	cookiesAllowableName[k] = struct{}{}
-}
-
-func init() {
-	SetCookieName(gwcfg.ServiceMetadataUID)
-	SetCookieName(gwcfg.ServiceMetadataServerId)
-	SetCookieName(gwcfg.ServiceMetadataDeveloper)
-}
-
-func CookiesFilter(cookie values.Metadata) values.Values {
-	r := values.Values{}
-	for k, v := range cookie {
-		if _, ok := cookiesAllowableName[k]; ok {
-			r[k] = v
-		}
-	}
-	return r
-}
 
 func CookiesUpdate(cookie values.Metadata, p *session.Data) {
 	vs := values.Values{}
 	for k, v := range cookie {
-		if strings.HasPrefix(k, gwcfg.ServicePlayerRoomJoin) {
-			k = strings.TrimPrefix(k, gwcfg.ServicePlayerRoomJoin)
+		if strings.HasPrefix(k, gwcfg.ServicePlayerChannelJoin) {
+			k = strings.TrimPrefix(k, gwcfg.ServicePlayerChannelJoin)
 			channel.Join(p, k, v)
-		} else if strings.HasPrefix(k, gwcfg.ServicePlayerRoomLeave) {
-			k = strings.TrimPrefix(k, gwcfg.ServicePlayerRoomLeave)
+		} else if strings.HasPrefix(k, gwcfg.ServicePlayerChannelLeave) {
+			k = strings.TrimPrefix(k, gwcfg.ServicePlayerChannelLeave)
 			channel.Leave(p, k, v)
-		} else if strings.HasPrefix(k, gwcfg.ServicePlayerSelector) {
-			vs[k] = v
-		} else if _, ok := cookiesAllowableName[k]; ok {
+		} else if _, ok := gwcfg.Cookies[k]; ok {
 			vs[k] = v
 		}
 	}
