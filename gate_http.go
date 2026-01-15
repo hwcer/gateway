@@ -2,13 +2,14 @@ package gateway
 
 import (
 	"encoding/json"
-	"gateway/gwcfg"
-	"gateway/players"
-	"gateway/token"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
+	"github.com/hwcer/gateway/token"
 
 	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosgo/session"

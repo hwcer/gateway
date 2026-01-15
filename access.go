@@ -1,8 +1,10 @@
-package gwcfg
+package gateway
 
 import (
 	"fmt"
-	"gateway/errors"
+
+	"github.com/hwcer/gateway/errors"
+	"github.com/hwcer/gateway/gwcfg"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
@@ -14,10 +16,10 @@ import (
 var Access = access{}
 
 func init() {
-	Access.Register(OAuthTypeNone, Access.None)
-	Access.Register(OAuthTypeOAuth, Access.OAuth)
-	Access.Register(OAuthTypeSelect, Access.Player)
-	Access.Register(OAuthTypePlayer, Access.Player)
+	Access.Register(gwcfg.OAuthTypeNone, Access.None)
+	Access.Register(gwcfg.OAuthTypeOAuth, Access.OAuth)
+	Access.Register(gwcfg.OAuthTypeSelect, Access.Player)
+	Access.Register(gwcfg.OAuthTypePlayer, Access.Player)
 }
 
 type accessSocket interface {
@@ -27,18 +29,18 @@ type accessSocket interface {
 type accessFunc func(r Context, req values.Metadata, isMaster bool) (*session.Data, error)
 
 type access struct {
-	dict map[OAuthType]accessFunc
+	dict map[gwcfg.OAuthType]accessFunc
 }
 
-func (this *access) Register(l OAuthType, f accessFunc) {
+func (this *access) Register(l gwcfg.OAuthType, f accessFunc) {
 	if this.dict == nil {
-		this.dict = make(map[OAuthType]accessFunc)
+		this.dict = make(map[gwcfg.OAuthType]accessFunc)
 	}
 	this.dict[l] = f
 }
 func (this *access) Verify(c Context, req values.Metadata, servicePath, serviceMethod string) (*session.Data, error) {
-	l, s := Authorize.Get(servicePath, serviceMethod)
-	isMaster := Authorize.IsMaster(s)
+	l, s := gwcfg.Authorize.Get(servicePath, serviceMethod)
+	isMaster := gwcfg.Authorize.IsMaster(s)
 	f, ok := this.dict[l]
 	if !ok {
 		return nil, fmt.Errorf("unknown authorization type: %d", l)
@@ -47,7 +49,7 @@ func (this *access) Verify(c Context, req values.Metadata, servicePath, serviceM
 	if err != nil {
 		return nil, err
 	}
-	req.Set(ServiceMetadataApi, l)
+	req.Set(gwcfg.ServiceMetadataApi, l)
 	return p, nil
 }
 
@@ -64,9 +66,9 @@ func (this *access) oauth(r Context, req values.Metadata) (p *session.Data, err 
 func (this *access) None(r Context, req values.Metadata, isMaster bool) (p *session.Data, err error) {
 	if f, ok := r.(accessSocket); ok {
 		sock := f.Socket()
-		req[ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
+		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
 	}
-	req[ServiceMetadataClientIp] = r.RemoteAddr()
+	req[gwcfg.ServiceMetadataClientIp] = r.RemoteAddr()
 	return
 }
 
@@ -77,10 +79,10 @@ func (this *access) OAuth(r Context, req values.Metadata, needMaster bool) (p *s
 	}
 	if f, ok := r.(accessSocket); ok {
 		sock := f.Socket()
-		req[ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
+		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
 	}
-	req[ServiceMetadataGUID] = p.UUID()
-	req[ServiceMetadataClientIp] = r.RemoteAddr()
+	req[gwcfg.ServiceMetadataGUID] = p.UUID()
+	req[gwcfg.ServiceMetadataClientIp] = r.RemoteAddr()
 	if needMaster && !this.IsDeveloper(p) {
 		err = errors.ErrNeedGameDeveloper
 	}
@@ -92,11 +94,11 @@ func (this *access) Player(r Context, req values.Metadata, needDeveloper bool) (
 	if p, err = this.oauth(r, req); err != nil {
 		return nil, err
 	}
-	uid := p.GetString(ServiceMetadataUID)
+	uid := p.GetString(gwcfg.ServiceMetadataUID)
 	if uid == "" {
 		return nil, errors.ErrNotSelectRole
 	}
-	req[ServiceMetadataUID] = uid
+	req[gwcfg.ServiceMetadataUID] = uid
 	if needDeveloper && !this.IsDeveloper(p) {
 		err = errors.ErrNeedGameDeveloper
 	}
@@ -108,7 +110,7 @@ func (this *access) IsDeveloper(p *session.Data) bool {
 	if p == nil {
 		return false
 	}
-	if gm := p.GetInt32(ServiceMetadataDeveloper); gm == 1 {
+	if gm := p.GetInt32(gwcfg.ServiceMetadataDeveloper); gm == 1 {
 		return true
 	}
 	return false

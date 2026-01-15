@@ -9,22 +9,21 @@ const (
 
 	ServiceMetadataSocketId     = "_s_id"
 	ServiceMetadataClientIp     = "_c_ip"
-	ServiceMetadataRequestKey   = "_rk"
-	ServiceMetadataResponseType = "_rt" //ResponseType 其中一种
-
-	ServiceMetadataCookie = "cookie"
+	ServiceMetadataRequestKey   = "_r_k" //Request id
+	ServiceMetadataResponseType = "_r_t" //ResponseType 其中一种,仅仅内部使用
+	ServiceMetadataGateway      = "_g_w"
+	ServiceMetadataCookie       = "cookie"
 
 	ServiceMessagePath    = "_msg_path"
-	ServiceMessageChannel = "_msg_channel"
 	ServiceMessageIgnore  = "_msg_ignore"
+	ServiceMessageChannel = "_msg_channel"
 
-	ServicePlayerLogin   = "_player_login"
-	ServicePlayerLogout  = "_player_logout"
-	ServicePlayerGateway = "_player_gateway"
+	ServicePlayerLogin  = "_player_login"
+	ServicePlayerLogout = "_player_logout"
 
-	ServicePlayerChannelJoin  = "player.join."     //已经加入的房间
-	ServicePlayerChannelLeave = "player.leave."    //离开房间
-	ServicePlayerSelector     = "service.selector" //服务器重定向
+	ServicePlayerChannelJoin  = "player.join."    //已经加入的房间
+	ServicePlayerChannelLeave = "player.leave."   //离开房间
+	ServicePlayerSelector     = "player.selector" //服务器重定向
 
 )
 

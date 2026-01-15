@@ -1,9 +1,10 @@
 package gateway
 
 import (
-	"gateway/channel"
-	"gateway/gwcfg"
 	"strings"
+
+	"github.com/hwcer/gateway/channel"
+	"github.com/hwcer/gateway/gwcfg"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"

@@ -2,11 +2,12 @@ package gateway
 
 import (
 	"errors"
-	"gateway/gwcfg"
-	"gateway/rpcx"
 	"net"
 	"strings"
 	"time"
+
+	"github.com/hwcer/cosrpc/redis"
+	"github.com/hwcer/gateway/gwcfg"
 
 	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/scc"
@@ -72,7 +73,7 @@ func (this *Module) Init() (err error) {
 }
 
 func (this *Module) Start() (err error) {
-	if err = rpcx.Start(); err != nil {
+	if err = redis.Start(gwcfg.Appid); err != nil {
 		return
 	}
 	if gwcfg.Options.Protocol.CMux() {

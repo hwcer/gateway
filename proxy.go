@@ -3,9 +3,10 @@ package gateway
 import (
 	"bytes"
 	"fmt"
-	"gateway/gwcfg"
-	"gateway/players"
 	"time"
+
+	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/session"
@@ -27,7 +28,7 @@ var ElapsedMillisecond = 500 * time.Millisecond
 // 返回值:
 //   - reply: 服务返回的数据
 //   - err: 处理过程中的错误
-func proxy(h gwcfg.Context) (reply []byte, err error) {
+func proxy(h Context) (reply []byte, err error) {
 	// 异常捕获和错误处理
 	defer func() {
 		if e := recover(); e != nil {
@@ -60,12 +61,12 @@ func proxy(h gwcfg.Context) (reply []byte, err error) {
 	}
 
 	// 权限验证：验证用户是否有权限访问该服务和方法
-	if p, err = gwcfg.Access.Verify(h, req, servicePath, serviceMethod); err != nil {
+	if p, err = Access.Verify(h, req, servicePath, serviceMethod); err != nil {
 		return nil, err
 	}
 
 	// 设置网关地址和用户级别微服务筛选器
-	req.Set(gwcfg.ServicePlayerGateway, cosrpc.Address().Encode())
+	req.Set(gwcfg.ServiceMetadataGateway, cosrpc.Address().Encode())
 	// 使用用户级别微服务筛选器：如果用户会话中存在该服务的地址，则使用该地址
 	if p != nil {
 		if serviceAddress := p.GetString(gwcfg.GetServiceSelectorAddress(servicePath)); serviceAddress != "" {

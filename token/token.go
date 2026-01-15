@@ -3,10 +3,11 @@ package token
 import (
 	"encoding/json"
 	"fmt"
-	"gateway/errors"
-	"gateway/gwcfg"
 	"regexp"
 	"time"
+
+	"github.com/hwcer/gateway/errors"
+	"github.com/hwcer/gateway/gwcfg"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/utils"

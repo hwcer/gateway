@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/hwcer/cosgo v1.6.5
 	github.com/hwcer/cosnet v1.3.3
-	github.com/hwcer/cosrpc v1.2.3
+	github.com/hwcer/cosrpc v1.3.0
 	github.com/hwcer/cosweb v1.3.6
 	github.com/hwcer/coswss v0.2.1
 	github.com/hwcer/logger v0.2.8
@@ -58,13 +58,13 @@ require (
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/smallnest/quick v0.2.0 // indirect
-	github.com/smallnest/rpcx v1.9.1
+	github.com/smallnest/rpcx v1.9.1 // indirect
 	github.com/smallnest/rsocket v0.0.0-20241130031020-4a72eb6ff62a // indirect
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spf13/viper v1.21.0
+	github.com/spf13/viper v1.21.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
@@ -94,6 +94,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-require github.com/rpcxio/libkv v0.5.1
+require github.com/rpcxio/libkv v0.5.1 // indirect
 
 require github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect

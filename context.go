@@ -1,4 +1,4 @@
-package gwcfg
+package gateway
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ type Context interface {
 	Accept() binder.Binder                                  //客户端接受的编码方式
 	Buffer() (buf *bytes.Buffer, err error)                 //数据包
 	Verify() (*session.Data, error)                         //验证登录信息
-	//Session() *session.Data                                 //获取 session 信息
-	Metadata() values.Metadata // query,转换成 rpc Metadata
+	Metadata() values.Metadata                              // query,转换成 rpc Metadata
 	RemoteAddr() string
 }

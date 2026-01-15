@@ -1,10 +1,11 @@
 package gateway
 
 import (
-	"gateway/gwcfg"
-	"gateway/players"
-	"gateway/token"
 	"net/http"
+
+	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
+	"github.com/hwcer/gateway/token"
 
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"

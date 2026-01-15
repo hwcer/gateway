@@ -1,11 +1,10 @@
 package gateway
 
 import (
-	"encoding/json"
-	"fmt"
-	"gateway/channel"
-	"gateway/gwcfg"
-	"gateway/players"
+	"github.com/hwcer/gateway/channel"
+	"github.com/hwcer/gateway/context"
+	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosrpc"
@@ -22,20 +21,9 @@ func init() {
 }
 
 // 内部接口，游戏服务器广播
-type channelHandle struct{}
-
-func (this channelHandle) parse(s string) (k, v string, err error) {
-	var r []string
-	if err = json.Unmarshal([]byte(s), &r); err != nil {
-		return
-	}
-	if len(r) < 2 {
-		err = fmt.Errorf("channel Broadcast args error :%s", s)
-	}
-	k = r[0]
-	v = r[1]
-	return
+type channelHandle struct {
 }
+
 func (this channelHandle) Broadcast(c *cosrpc.Context) any {
 	path := c.GetMetadata(gwcfg.ServiceMessagePath)
 	s := c.GetMetadata(gwcfg.ServiceMessageChannel)
@@ -43,7 +31,7 @@ func (this channelHandle) Broadcast(c *cosrpc.Context) any {
 		logger.Debug("频道名不能为空")
 		return nil
 	}
-	name, value, err := this.parse(s)
+	name, value, err := context.ChannelNameParse(s)
 	if err != nil {
 		return err
 	}
@@ -66,7 +54,7 @@ func (this channelHandle) Delete(c *cosrpc.Context) any {
 		logger.Debug("频道名不能为空")
 		return nil
 	}
-	name, value, err := this.parse(s)
+	name, value, err := context.ChannelNameParse(s)
 	if err != nil {
 		return err
 	}

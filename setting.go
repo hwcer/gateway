@@ -3,10 +3,11 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
-	"gateway/channel"
-	"gateway/gwcfg"
-	"gateway/players"
 	"strings"
+
+	"github.com/hwcer/gateway/channel"
+	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 
 	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/binder"

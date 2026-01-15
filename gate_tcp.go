@@ -3,15 +3,15 @@ package gateway
 import (
 	"bytes"
 	"fmt"
-	"gateway/errors"
-	"gateway/gwcfg"
-	"gateway/players"
-	"gateway/token"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
+	"github.com/hwcer/gateway/token"
 
 	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosgo/session"
@@ -193,7 +193,7 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 func (this *TcpServer) C2SReconnect(c *cosnet.Context) any {
 	secret := string(c.Message.Body())
 	if secret == "" {
-		return errors.ErrArgEmpty
+		return values.Error("secret empty")
 	}
 	if _, err := players.Reconnect(c.Socket, secret); err != nil {
 		return err

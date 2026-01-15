@@ -1,8 +1,8 @@
 package gateway
 
 import (
-	"gateway/gwcfg"
-	"gateway/players"
+	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 	"strconv"
 	"strings"
 

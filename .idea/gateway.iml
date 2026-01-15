@@ -5,5 +5,7 @@
     <content url="file://$MODULE_DIR$" />
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="modules" />
+    <orderEntry type="module" module-name="yyds" />
   </component>
 </module>

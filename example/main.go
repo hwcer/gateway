@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"gateway"
+
+	"github.com/hwcer/gateway"
 
 	"github.com/hwcer/cosgo"
 )
