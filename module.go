@@ -38,26 +38,26 @@ func (this *Module) Init() (err error) {
 	if err = this.Reload(); err != nil {
 		return
 	}
-	if gwcfg.Options.Address == "" {
+	if gwcfg.Options.Gate.Address == "" {
 		return errors.New("网关地址没有配置")
 	}
 	session.Heartbeat.Start()
 	//session
-	if gwcfg.Options.Redis != "" {
-		session.Options.Storage, err = session.NewRedis(gwcfg.Options.Redis)
+	if gwcfg.Options.Gate.Redis != "" {
+		session.Options.Storage, err = session.NewRedis(gwcfg.Options.Gate.Redis)
 	} else {
-		session.Options.Storage = session.NewMemory(gwcfg.Options.Capacity)
+		session.Options.Storage = session.NewMemory(gwcfg.Options.Gate.Capacity)
 	}
 	if err != nil {
 		return err
 	}
 
-	if i := strings.Index(gwcfg.Options.Address, ":"); i < 0 {
+	if i := strings.Index(gwcfg.Options.Gate.Address, ":"); i < 0 {
 		return errors.New("网关地址配置错误,格式: ip:port")
-	} else if gwcfg.Options.Address[0:i] == "" {
-		gwcfg.Options.Address = "0.0.0.0" + gwcfg.Options.Address
+	} else if gwcfg.Options.Gate.Address[0:i] == "" {
+		gwcfg.Options.Gate.Address = "0.0.0.0" + gwcfg.Options.Gate.Address
 	}
-	p := gwcfg.Options.Protocol
+	p := gwcfg.Options.Gate.Protocol
 	if p.Has(gwcfg.ProtocolTypeTCP) || p.Has(gwcfg.ProtocolTypeWSS) {
 		if err = TCP.init(); err != nil {
 			return err
@@ -73,24 +73,24 @@ func (this *Module) Init() (err error) {
 }
 
 func (this *Module) Start() (err error) {
-	if err = redis.Start(gwcfg.Appid); err != nil {
+	if err = redis.Start(); err != nil {
 		return
 	}
-	if gwcfg.Options.Protocol.CMux() {
+	if gwcfg.Options.Gate.Protocol.CMux() {
 		var ln net.Listener
-		if ln, err = net.Listen("tcp", gwcfg.Options.Address); err != nil {
+		if ln, err = net.Listen("tcp", gwcfg.Options.Gate.Address); err != nil {
 			return err
 		}
 		this.mux = cmux.New(ln)
 	}
-	p := gwcfg.Options.Protocol
+	p := gwcfg.Options.Gate.Protocol
 	//SOCKET
 	if p.Has(gwcfg.ProtocolTypeTCP) {
 		if this.mux != nil {
 			so := this.mux.Match(cosnet.Matcher)
 			err = TCP.Accept(so)
 		} else {
-			err = TCP.Listen(gwcfg.Options.Address)
+			err = TCP.Listen(gwcfg.Options.Gate.Address)
 		}
 		if err != nil {
 			return err
@@ -102,7 +102,7 @@ func (this *Module) Start() (err error) {
 			so := this.mux.Match(cmux.HTTP1Fast())
 			err = HTTP.Accept(so)
 		} else {
-			err = HTTP.Listen(gwcfg.Options.Address)
+			err = HTTP.Listen(gwcfg.Options.Gate.Address)
 		}
 		if err != nil {
 			return err
@@ -112,9 +112,9 @@ func (this *Module) Start() (err error) {
 	// websocket
 	if p.Has(gwcfg.ProtocolTypeWSS) {
 		if p.Has(gwcfg.ProtocolTypeHTTP) {
-			err = coswss.Binding(HTTP.Server, gwcfg.Options.Websocket)
+			err = coswss.Binding(HTTP.Server, gwcfg.Options.Gate.Websocket)
 		} else {
-			err = coswss.Listen(gwcfg.Options.Address, gwcfg.Options.Websocket)
+			err = coswss.Listen(gwcfg.Options.Gate.Address, gwcfg.Options.Gate.Websocket)
 		}
 		if err != nil {
 			return err
@@ -132,16 +132,14 @@ func (this *Module) Start() (err error) {
 }
 func (this *Module) Reload() error {
 
-	gwcfg.Appid = cosgo.Config.GetString("appid")
-	gwcfg.Secret = cosgo.Config.GetString("secret")
-	gwcfg.Developer = cosgo.Config.GetString("developer")
-	gwcfg.Maintenance = cosgo.Config.GetBool("maintenance")
-
-	if gwcfg.Appid == "" {
-		gwcfg.Appid = cosgo.Name()
+	if err := cosgo.Config.Unmarshal(&gwcfg.Options); err != nil {
+		return err
+	}
+	if gwcfg.Options.Appid == "" {
+		gwcfg.Options.Appid = cosgo.Name()
 	}
 
-	return cosgo.Config.UnmarshalKey(gwcfg.ServiceName, &gwcfg.Options)
+	return nil
 }
 func (this *Module) Close() (err error) {
 	if this.mux != nil {

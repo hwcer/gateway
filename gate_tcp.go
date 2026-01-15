@@ -84,7 +84,7 @@ func (this *TcpServer) serialize(c *cosnet.Context, reply any) ([]byte, error) {
 func (this *TcpServer) Listen(address string) error {
 	_, err := cosnet.Listen(address)
 	if err == nil {
-		logger.Trace("网关长连接启动：%v", gwcfg.Options.Address)
+		logger.Trace("网关长连接启动：%v", gwcfg.Options.Gate.Address)
 	}
 	return err
 }
@@ -97,7 +97,7 @@ func (this *TcpServer) Listen(address string) error {
 //   - error: 接受连接过程中的错误
 func (this *TcpServer) Accept(ln net.Listener) error {
 	cosnet.Accept(&tcp.Listener{Listener: ln})
-	logger.Trace("网关长连接启动：%v", gwcfg.Options.Address)
+	logger.Trace("网关长连接启动：%v", gwcfg.Options.Gate.Address)
 	return nil
 }
 

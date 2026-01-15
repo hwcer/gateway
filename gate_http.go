@@ -65,10 +65,10 @@ func (this *HttpServer) init() (err error) {
 	h.SetSerialize(this.serialize)
 
 	// 静态文件服务
-	if gwcfg.Options.Static != nil && gwcfg.Options.Static.Root != "" {
-		static := this.Server.Static(gwcfg.Options.Static.Route, gwcfg.Options.Static.Root, http.MethodGet)
-		if gwcfg.Options.Static.Index != "" {
-			static.Index(gwcfg.Options.Static.Index)
+	if gwcfg.Options.Gate.Static != nil && gwcfg.Options.Gate.Static.Root != "" {
+		static := this.Server.Static(gwcfg.Options.Gate.Static.Route, gwcfg.Options.Gate.Static.Root, http.MethodGet)
+		if gwcfg.Options.Gate.Static.Index != "" {
+			static.Index(gwcfg.Options.Gate.Static.Index)
 		}
 	}
 	return nil
@@ -94,13 +94,13 @@ func (this *HttpServer) serialize(c *cosweb.Context, reply any) ([]byte, error) 
 // 返回值:
 //   - error: 监听过程中的错误
 func (this *HttpServer) Listen(address string) (err error) {
-	if gwcfg.Options.KeyFile != "" && gwcfg.Options.CertFile != "" {
-		err = this.Server.TLS(address, gwcfg.Options.CertFile, gwcfg.Options.KeyFile)
+	if gwcfg.Options.Gate.KeyFile != "" && gwcfg.Options.Gate.CertFile != "" {
+		err = this.Server.TLS(address, gwcfg.Options.Gate.CertFile, gwcfg.Options.Gate.KeyFile)
 	} else {
 		err = this.Server.Listen(address)
 	}
 	if err == nil {
-		logger.Trace("网关短连接启动：%v", gwcfg.Options.Address)
+		logger.Trace("网关短连接启动：%v", gwcfg.Options.Gate.Address)
 	}
 	return
 }
@@ -112,13 +112,13 @@ func (this *HttpServer) Listen(address string) (err error) {
 // 返回值:
 //   - error: 接受连接过程中的错误
 func (this *HttpServer) Accept(ln net.Listener) (err error) {
-	if gwcfg.Options.KeyFile != "" && gwcfg.Options.CertFile != "" {
-		err = this.Server.TLS(ln, gwcfg.Options.CertFile, gwcfg.Options.KeyFile)
+	if gwcfg.Options.Gate.KeyFile != "" && gwcfg.Options.Gate.CertFile != "" {
+		err = this.Server.TLS(ln, gwcfg.Options.Gate.CertFile, gwcfg.Options.Gate.KeyFile)
 	} else {
 		err = this.Server.Accept(ln)
 	}
 	if err == nil {
-		logger.Trace("网关短连接启动：%v", gwcfg.Options.Address)
+		logger.Trace("网关短连接启动：%v", gwcfg.Options.Gate.Address)
 	}
 	return
 }
@@ -269,7 +269,7 @@ func (this *httpProxy) Metadata() values.Metadata {
 	if t := this.getContentType(binder.HeaderContentType, ";"); t != "" {
 		this.metadata.Set(binder.HeaderContentType, t)
 	} else {
-		this.metadata.Set(binder.HeaderContentType, gwcfg.Binder)
+		this.metadata.Set(binder.HeaderContentType, gwcfg.Options.Binder)
 	}
 	// 设置Accept
 	if t := this.getContentType(binder.HeaderAccept, ","); t != "" {

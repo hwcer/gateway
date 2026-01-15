@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/hwcer/cosgo v1.6.5
 	github.com/hwcer/cosnet v1.3.3
-	github.com/hwcer/cosrpc v1.3.0
+	github.com/hwcer/cosrpc v1.3.1
 	github.com/hwcer/cosweb v1.3.6
 	github.com/hwcer/coswss v0.2.1
 	github.com/hwcer/logger v0.2.8

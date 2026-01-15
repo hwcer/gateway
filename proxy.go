@@ -97,8 +97,8 @@ func proxy(h Context) (reply []byte, err error) {
 	// 调用服务
 	reply = make([]byte, 0)
 	// 如果配置了服务前缀，则添加前缀
-	if gwcfg.Options.Prefix != "" {
-		serviceMethod = registry.Join(gwcfg.Options.Prefix, serviceMethod)
+	if gwcfg.Options.Gate.Prefix != "" {
+		serviceMethod = registry.Join(gwcfg.Options.Gate.Prefix, serviceMethod)
 	}
 	// 调用远程服务
 	if err = client.CallWithMetadata(req, res, servicePath, serviceMethod, body, &reply); err != nil {

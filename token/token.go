@@ -31,10 +31,10 @@ func (this *Args) Verify() (r *Token, err error) {
 	r = &Token{}
 	//是否开启 GM
 	if this.Secret != "" {
-		if gwcfg.Developer == "" {
+		if gwcfg.Options.Developer == "" {
 			return nil, fmt.Errorf("GM commands are disabled")
 		}
-		if this.Secret != gwcfg.Developer {
+		if this.Secret != gwcfg.Options.Developer {
 			return nil, fmt.Errorf("GM commands error")
 		}
 		r.Developer = true
@@ -51,11 +51,11 @@ func (this *Args) Verify() (r *Token, err error) {
 	if this.Access == "" {
 		return nil, session.ErrorSessionEmpty
 	}
-	if gwcfg.Secret == "" {
+	if gwcfg.Options.Secret == "" {
 		return nil, session.Errorf("Options.Secret is empty")
 	}
 	var s string
-	if s, err = utils.Crypto.GCMDecrypt(this.Access, gwcfg.Secret, nil); err != nil {
+	if s, err = utils.Crypto.GCMDecrypt(this.Access, gwcfg.Options.Secret, nil); err != nil {
 		return nil, session.Errorf(err)
 	}
 	if err = json.Unmarshal([]byte(s), r); err != nil {
@@ -67,10 +67,10 @@ func (this *Args) Verify() (r *Token, err error) {
 	if r.Expire > 0 && r.Expire < time.Now().Unix() {
 		return nil, session.ErrorSessionExpired
 	}
-	if r.Appid != gwcfg.Appid {
+	if r.Appid != gwcfg.Options.Appid {
 		return nil, session.Errorf("access appid error")
 	}
-	if gwcfg.Maintenance && !r.Developer {
+	if gwcfg.Options.Maintenance && !r.Developer {
 		return nil, errors.ErrServerMaintenance
 	}
 	return
