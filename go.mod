@@ -1,4 +1,4 @@
-module gateway
+module github.com/hwcer/gateway
 
 go 1.24.0
 
