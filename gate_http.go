@@ -57,7 +57,9 @@ func (this *HttpServer) init() (err error) {
 	allow.Headers(strings.Join(Headers, ","))
 	this.Server.Use(allow.Handle)
 	// 注册服务
-	this.Server.Register(Setting.C2SOAuth, this.oauth)     // 注册认证服务
+	if Setting.C2SOAuth != "" {
+		this.Server.Register(Setting.C2SOAuth, this.oauth) // 注册认证服务
+	}
 	this.Server.Register("*", this.proxy, http.MethodPost) // 注册代理服务，处理所有POST请求
 	// 设置序列化器
 	service := this.Server.Service()

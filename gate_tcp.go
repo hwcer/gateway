@@ -51,9 +51,11 @@ func (this *TcpServer) init() error {
 
 	// 注册服务
 	service := cosnet.Service()
-	_ = service.Register(this.proxy, "*")                   // 注册代理服务，处理所有请求
-	_ = service.Register(this.C2SPing, "ping")              // 注册心跳服务
-	_ = service.Register(this.C2SOAuth, Setting.C2SOAuth)   // 注册认证服务
+	_ = service.Register(this.proxy, "*")      // 注册代理服务，处理所有请求
+	_ = service.Register(this.C2SPing, "ping") // 注册心跳服务
+	if Setting.C2SOAuth != "" {
+		_ = service.Register(this.C2SOAuth, Setting.C2SOAuth) // 注册认证服务
+	}
 	_ = service.Register(this.C2SReconnect, "C2SReconnect") // 注册重连服务
 
 	// 设置序列化器

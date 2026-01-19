@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hwcer/cosrpc/selector"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -70,7 +71,7 @@ func proxy(h Context) (reply []byte, err error) {
 	// 使用用户级别微服务筛选器：如果用户会话中存在该服务的地址，则使用该地址
 	if p != nil {
 		if serviceAddress := p.GetString(gwcfg.GetServiceSelectorAddress(servicePath)); serviceAddress != "" {
-			req.Set(gwcfg.ServicePlayerSelector, serviceAddress)
+			req.Set(selector.MetaDataAddress, serviceAddress)
 		}
 	}
 

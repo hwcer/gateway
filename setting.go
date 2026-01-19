@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hwcer/cosnet"
 	"github.com/hwcer/gateway/channel"
+	"github.com/hwcer/gateway/errors"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -14,7 +16,6 @@ import (
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
-	"github.com/hwcer/cosnet"
 )
 
 func init() {
@@ -35,12 +36,12 @@ type Accept interface {
 var Setting = struct {
 	Errorf      func(err error) []byte                                                                //格式化输出网关错误
 	Router      router                                                                                //路由处理规则
-	C2SOAuth    string                                                                                //网关登录
-	S2CSecret   func(sock *cosnet.Socket, secret string)                                              //登录成功时给客户端发送秘钥,空值不处理
-	S2CReplaced func(sock *cosnet.Socket, address string)                                             //被顶号时给客户端发送的顶号提示,空值不处理
+	C2SOAuth    string                                                                                //网关登录,置空时不启用默认验证方式
 	Request     func(p *session.Data, path string, req values.Metadata, args []byte) ([]byte, error)  //网关转发消息时,如果数据有加密，可以在解密之后转发
 	Response    func(p *session.Data, path string, res values.Metadata, reply []byte) ([]byte, error) //rpc 返回数据时
 	Serialize   func(accept Accept, reply any) ([]byte, error)                                        //序列化方式
+	S2CSecret   func(sock *cosnet.Socket, secret string)                                              //登录成功时给客户端发送秘钥,空值不处理
+	S2CReplaced func(sock *cosnet.Socket, address string)                                             //被顶号时给客户端发送的顶号提示,空值不处理
 }{
 	Errorf:    defaultErrorf,
 	Router:    defaultRouter,
@@ -62,7 +63,7 @@ var defaultRouter router = func(path string, req values.Metadata) (servicePath, 
 	path = strings.TrimPrefix(path, "/")
 	i := strings.Index(path, "/")
 	if i < 0 {
-		err = values.Errorf(404, "page not found")
+		err = errors.ErrNotFount
 		return
 	}
 	servicePath = registry.Formatter(path[0:i])
