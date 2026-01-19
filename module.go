@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosrpc/redis"
 	"github.com/hwcer/gateway/gwcfg"
 
@@ -67,6 +68,14 @@ func (this *Module) Init() (err error) {
 		if err = HTTP.init(); err != nil {
 			return err
 		}
+	}
+	//将 G2SOAuth 设置为 必须登录
+	if Setting.G2SOAuth != "" {
+		var ServicePath, ServiceMethod string
+		if ServicePath, ServiceMethod, err = Setting.Router(Setting.G2SOAuth, values.Metadata{}); err != nil {
+			return err
+		}
+		gwcfg.Authorize.Set(ServicePath, ServiceMethod, gwcfg.OAuthTypeOAuth)
 	}
 
 	return nil

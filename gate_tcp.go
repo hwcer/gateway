@@ -132,7 +132,7 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	if err != nil {
 		return err
 	}
-	// 创建socket代理并登录
+	// 创建 socket 代理并登录
 	h := socketProxy{Context: c}
 	vs := values.Values{}
 	if data.Developer {
@@ -143,7 +143,16 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	if _, err = h.Login(data.Guid, vs); err != nil {
 		return err
 	}
-	return nil
+
+	if Setting.G2SOAuth == "" {
+		return nil
+	}
+
+	var reply []byte
+	if reply, err = proxy(Setting.G2SOAuth, &h, nil); err != nil {
+		return err
+	}
+	return reply
 }
 
 // S2CSecret 发送断线重连密钥
@@ -220,8 +229,12 @@ func (this *TcpServer) Disconnect(sock *cosnet.Socket, _ any) {
 // 返回值:
 //   - any: 代理结果
 func (this *TcpServer) proxy(c *cosnet.Context) any {
-	h := &socketProxy{Context: c}
-	reply, err := proxy(h)
+	path, _, err := c.Path()
+	if err != nil {
+		return err
+	}
+	h := socketProxy{Context: c}
+	reply, err := proxy(path, &h, nil)
 	if err != nil {
 		return err
 	}
@@ -244,15 +257,6 @@ func (this *socketProxy) Verify() (*session.Data, error) {
 		return nil, session.ErrorSessionNotExist
 	}
 	return data, nil
-}
-
-// Path 获取请求路径
-// 返回值:
-//   - string: 请求路径
-//   - error: 获取过程中的错误
-func (this *socketProxy) Path() (string, error) {
-	r, _, err := this.Context.Path()
-	return r, err
 }
 
 // Login 登录
@@ -313,7 +317,7 @@ func (this *socketProxy) Metadata() values.Metadata {
 	}
 	magic := this.Message.Magic()
 	meta[binder.HeaderContentType] = magic.Binder.Name()
-	meta[gwcfg.ServiceMetadataRequestKey] = fmt.Sprintf("%d", this.Context.Message.Index())
+	meta[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
 	return meta
 }
 

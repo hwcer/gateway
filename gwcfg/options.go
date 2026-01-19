@@ -1,13 +1,16 @@
 package gwcfg
 
 import (
-	"strings"
-
 	"github.com/hwcer/cosgo/binder"
 )
 
 const (
-	ServiceName = "gate"
+	ServiceName             = "gate"
+	MessageSend             = "send"
+	MessageWrite            = "write"
+	MessageBroadcast        = "broadcast"
+	MessageChannelDelete    = "channel/delete"
+	MessageChannelBroadcast = "channel/broadcast"
 )
 
 type protocol int8
@@ -35,7 +38,7 @@ func (p protocol) CMux() bool {
 	return v > 1
 }
 
-type Config struct {
+type config struct {
 	Redis     string   `json:"redis"`     //使用redis存储session，开启长连接时，请不要使用redis存储session
 	Static    *Static  `json:"static"`    //静态服务器
 	Prefix    string   `json:"prefix"`    //路由强制前缀
@@ -47,21 +50,23 @@ type Config struct {
 	CertFile  string   `json:"CertFile"`  //HTTPS 证书Cert
 }
 
+var Gateway = &config{
+	Prefix:    "handle",
+	Address:   "0.0.0.0:80",
+	Capacity:  10240,
+	Protocol:  2,
+	Websocket: "ws",
+}
+
 var Options = struct {
-	Gate        Config `json:"gate"`
-	Appid       string `json:"appid"`  //程序名称
-	Secret      string `json:"secret"` //平台秘钥
-	Binder      string `json:"binder"`
-	Developer   string `json:"developer"`   //开发者模式秘钥
-	Maintenance bool   `json:"maintenance"` //进入维护模式，仅仅开发人员允许进入
+	Gate        *config `json:"gate"`
+	Appid       string  `json:"appid"`  //程序名称
+	Secret      string  `json:"secret"` //平台秘钥
+	Binder      string  `json:"binder"`
+	Developer   string  `json:"developer"`   //开发者模式秘钥
+	Maintenance bool    `json:"maintenance"` //进入维护模式，仅仅开发人员允许进入
 }{
-	Gate: Config{
-		Prefix:    "handle",
-		Address:   "0.0.0.0:80",
-		Capacity:  10240,
-		Protocol:  2,
-		Websocket: "ws",
-	},
+	Gate:   Gateway,
 	Binder: binder.Json.Name(),
 }
 
@@ -69,8 +74,4 @@ type Static struct {
 	Root  string `json:"root"`  //静态服务器根目录
 	Route string `json:"route"` //静态服务器器前缀
 	Index string `json:"index"` //默认页面
-}
-
-func GetServiceSelectorAddress(k string) string {
-	return ServicePlayerSelector + strings.ToLower(k)
 }

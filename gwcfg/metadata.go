@@ -2,15 +2,15 @@ package gwcfg
 
 const (
 	ServiceMetadataUID       = "uid"
-	ServiceMetadataSID       = "sid"
 	ServiceMetadataGUID      = "guid"
-	ServiceMetadataApi       = "api" //接口等级
-	ServiceMetadataDeveloper = "dev" //开发者身份
+	ServiceMetadataServerId  = "sid"
+	ServiceMetadataDeveloper = "dev"   //开发者身份
+	ServiceMetadataAuthorize = "OAuth" //接口等级
 
 	ServiceMetadataSocketId     = "_s_id"
 	ServiceMetadataClientIp     = "_c_ip"
-	ServiceMetadataRequestKey   = "_r_k" //Request id
-	ServiceMetadataResponseType = "_r_t" //ResponseType 其中一种,仅仅内部使用
+	ServiceMetadataRequestId    = "_r_id" //Request id
+	ServiceMetadataResponseType = "_r_t"  //ResponseType 其中一种,仅仅内部使用
 	ServiceMetadataGateway      = "_g_w"
 	ServiceMetadataCookie       = "cookie"
 

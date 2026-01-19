@@ -37,6 +37,7 @@ var Setting = struct {
 	Errorf      func(err error) []byte                                                                //格式化输出网关错误
 	Router      router                                                                                //路由处理规则
 	C2SOAuth    string                                                                                //网关登录,置空时不启用默认验证方式
+	G2SOAuth    string                                                                                //游戏服登录验证,网关登录登录成功后继续使用GUID去游戏服验证,留空不进行验证
 	Request     func(p *session.Data, path string, req values.Metadata, args []byte) ([]byte, error)  //网关转发消息时,如果数据有加密，可以在解密之后转发
 	Response    func(p *session.Data, path string, res values.Metadata, reply []byte) ([]byte, error) //rpc 返回数据时
 	Serialize   func(accept Accept, reply any) ([]byte, error)                                        //序列化方式
@@ -79,7 +80,7 @@ func defaultResponse(p *session.Data, path string, res values.Metadata, data []b
 	rt := res.GetString(gwcfg.ServiceMetadataResponseType)
 	if rt == gwcfg.ResponseTypeReceived && p != nil {
 		i := p.Atomic()
-		res[gwcfg.ServiceMetadataRequestKey] = fmt.Sprintf("%d", -i)
+		res[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", -i)
 	}
 	return data, nil
 }

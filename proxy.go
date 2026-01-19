@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -29,7 +30,7 @@ var ElapsedMillisecond = 500 * time.Millisecond
 // 返回值:
 //   - reply: 服务返回的数据
 //   - err: 处理过程中的错误
-func proxy(h Context) (reply []byte, err error) {
+func proxy(path string, h Context, cookie map[string]string) (reply []byte, err error) {
 	// 异常捕获和错误处理
 	defer func() {
 		if e := recover(); e != nil {
@@ -44,12 +45,19 @@ func proxy(h Context) (reply []byte, err error) {
 	// 获取请求元数据和创建响应元数据
 	req := h.Metadata()
 	res := make(values.Metadata)
-
-	// 获取请求路径
-	var path string
-	if path, err = h.Path(); err != nil {
-		return nil, err
+	// HTTP认证时将COOKIE传到服务器，由服务器封装响应信息以应对部分UNITY无法直接使用cookie的情况
+	if cookie != nil {
+		var b []byte
+		if b, err = json.Marshal(cookie); err != nil {
+			return nil, err
+		}
+		req[gwcfg.ServiceMetadataCookie] = string(b)
 	}
+	// 获取请求路径
+	//var path string
+	//if path, err = h.Path(); err != nil {
+	//	return nil, err
+	//}
 
 	// 路由解析和权限验证
 	var p *session.Data

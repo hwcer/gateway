@@ -6,7 +6,7 @@ var Cookies = cookiesAllowableName{}
 
 func init() {
 	Cookies.Enable(ServiceMetadataUID)
-	Cookies.Enable(ServiceMetadataSID)
+	Cookies.Enable(ServiceMetadataServerId)
 	Cookies.Enable(ServiceMetadataDeveloper)
 }
 

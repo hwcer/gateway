@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"encoding/json"
 	"net"
 	"net/http"
 	"net/url"
@@ -136,12 +135,12 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	if err := c.Bind(&args); err != nil {
 		return err
 	}
-	// 验证token
+	// 验证 token
 	data, err := args.Verify()
 	if err != nil {
 		return err
 	}
-	// 创建http代理并登录
+	// 创建 http 代理并登录
 	h := httpProxy{Context: c}
 	vs := values.Values{}
 	if data.Developer {
@@ -149,10 +148,18 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	} else {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, "")
 	}
+
 	// 构建响应
-	reply := map[string]interface{}{}
-	reply["key"] = session.Options.Name
-	if reply["val"], err = h.Login(data.Guid, vs); err != nil {
+	cookie := map[string]string{}
+	cookie["key"] = session.Options.Name
+	if cookie["val"], err = h.Login(data.Guid, vs); err != nil {
+		return err
+	}
+	if Setting.G2SOAuth == "" {
+		return cookie
+	}
+	var reply []byte
+	if reply, err = proxy(Setting.G2SOAuth, &h, cookie); err != nil {
 		return err
 	}
 	return reply
@@ -165,9 +172,9 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 // 返回值:
 //   - any: 代理结果
 func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
-	// 创建http代理并处理请求
-	h := &httpProxy{Context: c}
-	reply, err := proxy(h)
+	// 创建 http 代理并处理请求
+	h := httpProxy{Context: c}
+	reply, err := proxy(c.Request.URL.Path, &h, nil)
 	if err != nil {
 		return err
 	}
@@ -181,14 +188,6 @@ type httpProxy struct {
 	uri      *url.URL
 	cookie   *http.Cookie
 	metadata values.Metadata
-}
-
-// Path 获取请求路径
-// 返回值:
-//   - string: 请求路径
-//   - error: 获取过程中的错误
-func (this *httpProxy) Path() (string, error) {
-	return this.Context.Request.URL.Path, nil
 }
 
 // Login 登录
@@ -276,12 +275,6 @@ func (this *httpProxy) Metadata() values.Metadata {
 	// 设置Accept
 	if t := this.getContentType(binder.HeaderAccept, ","); t != "" {
 		this.metadata.Set(binder.HeaderAccept, t)
-	}
-	// 设置cookie信息
-	if this.cookie != nil {
-		cookie := map[string]string{"name": session.Options.Name, "value": this.cookie.Value}
-		b, _ := json.Marshal(cookie)
-		this.metadata.Set(gwcfg.ServiceMetadataCookie, string(b))
 	}
 	return this.metadata
 }

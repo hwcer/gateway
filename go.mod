@@ -3,10 +3,10 @@ module github.com/hwcer/gateway
 go 1.24.0
 
 require (
-	github.com/hwcer/cosgo v1.6.5
-	github.com/hwcer/cosnet v1.3.3
-	github.com/hwcer/cosrpc v1.3.1
-	github.com/hwcer/cosweb v1.3.6
+	github.com/hwcer/cosgo v1.6.6
+	github.com/hwcer/cosnet v1.3.4
+	github.com/hwcer/cosrpc v1.3.3
+	github.com/hwcer/cosweb v1.3.7
 	github.com/hwcer/coswss v0.2.1
 	github.com/hwcer/logger v0.2.8
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
@@ -41,7 +41,7 @@ require (
 	github.com/juju/ratelimit v1.0.2 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/kavu/go_reuseport v1.5.0 // indirect
-	github.com/klauspost/compress v1.18.2 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/reedsolomon v1.13.0 // indirect
 	github.com/libp2p/go-sockaddr v0.2.0 // indirect

@@ -9,7 +9,6 @@ import (
 )
 
 type Context interface {
-	Path() (string, error)
 	Login(guid string, value values.Values) (string, error) //通过业务服激活登录信息
 	Logout() error                                          //退出登录
 	Accept() binder.Binder                                  //客户端接受的编码方式

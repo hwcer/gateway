@@ -1,10 +1,11 @@
 package gateway
 
 import (
-	"github.com/hwcer/gateway/gwcfg"
-	"github.com/hwcer/gateway/players"
 	"strconv"
 	"strings"
+
+	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosnet"
@@ -92,7 +93,7 @@ func send(c *cosrpc.Context) any {
 	}
 
 	var rid int32
-	if s, ok := mate[gwcfg.ServiceMetadataRequestKey]; ok {
+	if s, ok := mate[gwcfg.ServiceMetadataRequestId]; ok {
 		i, _ := strconv.Atoi(s)
 		rid = int32(i)
 	}
