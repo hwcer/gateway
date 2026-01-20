@@ -15,8 +15,9 @@ import (
 
 // 默认的 认证方式
 type Token struct {
-	Guid      string `json:"guid"`
+	//Guid      string `json:"guid"`
 	Appid     string `json:"appid"`
+	Openid    string `json:"openid"`
 	Expire    int64  `json:"expire"`
 	Developer bool   `json:"developer"`
 }
@@ -44,7 +45,7 @@ func (this *Args) Verify() (r *Token, err error) {
 		if err = this.validateAccountComprehensive(this.Guid); err != nil {
 			return
 		}
-		r.Guid = this.Guid
+		r.Openid = this.Guid
 		return
 	}
 	//正常游戏模式
@@ -61,7 +62,7 @@ func (this *Args) Verify() (r *Token, err error) {
 	if err = json.Unmarshal([]byte(s), r); err != nil {
 		return nil, session.Errorf(err)
 	}
-	if r.Guid == "" {
+	if r.Openid == "" {
 		return nil, session.Errorf("access guid empty")
 	}
 	if r.Expire > 0 && r.Expire < time.Now().Unix() {

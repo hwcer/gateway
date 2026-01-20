@@ -140,7 +140,7 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	} else {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, "")
 	}
-	if _, err = h.Login(data.Guid, vs); err != nil {
+	if _, err = h.Login(data.Openid, vs); err != nil {
 		return err
 	}
 

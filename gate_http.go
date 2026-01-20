@@ -152,7 +152,7 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	// 构建响应
 	cookie := map[string]string{}
 	cookie["key"] = session.Options.Name
-	if cookie["val"], err = h.Login(data.Guid, vs); err != nil {
+	if cookie["val"], err = h.Login(data.Openid, vs); err != nil {
 		return err
 	}
 	if Setting.G2SOAuth == "" {
