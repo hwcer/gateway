@@ -42,7 +42,7 @@ type TcpServer struct {
 func (this *TcpServer) init() error {
 	// 关闭 cosnet 计时器,由session接管
 	cosnet.Options.Heartbeat = 0
-	session.Heartbeat.On(cosnet.Heartbeat)
+	session.On(session.EventHeartbeat, this.heartbeat)
 
 	// 注册事件回调
 	cosnet.On(cosnet.EventTypeReplaced, this.S2CReplaced)
@@ -89,6 +89,14 @@ func (this *TcpServer) Listen(address string) error {
 		logger.Trace("网关长连接启动：%v", gwcfg.Options.Gate.Address)
 	}
 	return err
+}
+
+func (this *TcpServer) heartbeat(i any) {
+	s, _ := i.(int32)
+	if s <= 0 {
+		return
+	}
+	cosnet.Heartbeat(s)
 }
 
 // Accept 接受TCP连接

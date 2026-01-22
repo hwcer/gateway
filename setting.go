@@ -20,13 +20,19 @@ import (
 
 func init() {
 	cosgo.On(cosgo.EventTypStarted, func() error {
-		//监控登录信息
-		session.OnRelease(func(data *session.Data) {
-			_ = players.Delete(data)
-			channel.Release(data)
-		})
+		session.On(session.EventSessionRelease, release)
 		return nil
 	})
+}
+
+// 监控登录信息
+func release(i any) {
+	data, _ := i.(*session.Data)
+	if data == nil {
+		return
+	}
+	_ = players.Delete(data)
+	channel.Release(data)
 }
 
 type Accept interface {

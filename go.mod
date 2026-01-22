@@ -3,7 +3,7 @@ module github.com/hwcer/gateway
 go 1.24.0
 
 require (
-	github.com/hwcer/cosgo v1.6.7
+	github.com/hwcer/cosgo v1.6.8
 	github.com/hwcer/cosnet v1.3.4
 	github.com/hwcer/cosrpc v1.3.3
 	github.com/hwcer/cosweb v1.3.7
@@ -83,7 +83,7 @@ require (
 	github.com/xtaci/kcp-go v5.4.20+incompatible // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.mongodb.org/mongo-driver v1.17.6 // indirect
+	go.mongodb.org/mongo-driver v1.17.7 // indirect
 	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/mod v0.32.0 // indirect

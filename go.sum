@@ -140,8 +140,8 @@ github.com/hashicorp/mdns v1.0.1/go.mod h1:4gW7WsVCke5TE7EPeYliwHlRUyBtfCwuFwuMg
 github.com/hashicorp/memberlist v0.2.2/go.mod h1:MS2lj3INKhZjWNqd3N0m3J+Jxf3DAOnAH9VT3Sh9MUE=
 github.com/hashicorp/serf v0.9.5/go.mod h1:UWDWwZeL5cuWDJdl0C6wrvrUwEqtQ4ZKBKKENpqIUyk=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
-github.com/hwcer/cosgo v1.6.7 h1:+4tnz60pEAL6G9keSsfWgeuzUI8wzhkLsOgrngxMF3U=
-github.com/hwcer/cosgo v1.6.7/go.mod h1:0lJQJxUr6tm2rVPHxHuVJrq6oYZvBo6+8rxTeAvofo0=
+github.com/hwcer/cosgo v1.6.8 h1:OUjm+tbOj35Ojxp0C/vlrCqqRm4vXGAG1REz2WA4szs=
+github.com/hwcer/cosgo v1.6.8/go.mod h1:0lJQJxUr6tm2rVPHxHuVJrq6oYZvBo6+8rxTeAvofo0=
 github.com/hwcer/cosnet v1.3.4 h1:FqS6rVg2rOWK/2doLdDA/eIoWDzQOkDvM49TioaZ0W8=
 github.com/hwcer/cosnet v1.3.4/go.mod h1:JFbUBIL9qKGg9Nu2esBGB9HbY8+SUDWVFyOkB2hQhU0=
 github.com/hwcer/cosrpc v1.3.3 h1:I3ZWeZaTgQJq5WlI3361VW4jN40r0LFaUM3D2BLbdGw=
@@ -340,6 +340,8 @@ github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 go.mongodb.org/mongo-driver v1.17.6 h1:87JUG1wZfWsr6rIz3ZmpH90rL5tea7O3IHuSwHUpsss=
 go.mongodb.org/mongo-driver v1.17.6/go.mod h1:Hy04i7O2kC4RS06ZrhPRqj/u4DTYkFDAAccj+rVKqgQ=
+go.mongodb.org/mongo-driver v1.17.7 h1:a9w+U3Vt67eYzcfq3k/OAv284/uUUkL0uP75VE5rCOU=
+go.mongodb.org/mongo-driver v1.17.7/go.mod h1:Hy04i7O2kC4RS06ZrhPRqj/u4DTYkFDAAccj+rVKqgQ=
 go.opentelemetry.io/otel v0.19.0/go.mod h1:j9bF567N9EfomkSidSfmMwIwIBuP37AMAIzVW85OxSg=
 go.opentelemetry.io/otel/metric v0.19.0/go.mod h1:8f9fglJPRnXuskQmKpnad31lcLJ2VmNNqIsx/uIwBSc=
 go.opentelemetry.io/otel/oteltest v0.19.0/go.mod h1:tI4yxwh8U21v7JD6R3BcA/2+RBoTKFexE/PJ/nSO7IA=
