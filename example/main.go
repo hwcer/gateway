@@ -17,5 +17,5 @@ func main() {
 
 func banner() {
 	str := "\n大威天龙，大罗法咒，般若诸佛，般若巴嘛空。\n"
-	fmt.Printf(str)
+	fmt.Println(str)
 }

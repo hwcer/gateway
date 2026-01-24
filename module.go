@@ -14,6 +14,7 @@ import (
 	"github.com/hwcer/cosgo/scc"
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosnet"
+	"github.com/hwcer/cosweb"
 	"github.com/hwcer/coswss"
 	"github.com/soheilhy/cmux"
 )
@@ -121,9 +122,15 @@ func (this *Module) Start() (err error) {
 	// websocket
 	if p.Has(gwcfg.ProtocolTypeWSS) {
 		if p.Has(gwcfg.ProtocolTypeHTTP) {
-			err = coswss.Binding(HTTP.Server, gwcfg.Options.Gate.Websocket)
+			// 使用coswss.Handler()获取WebSocket处理器并绑定到HTTP服务器
+			// 创建一个适配器，将coswss.Handler()转换为cosweb.HandlerFunc
+			HTTP.Server.Register(gwcfg.Options.Gate.Websocket, func(c *cosweb.Context) any {
+				coswss.Handler()(c.Response, c.Request)
+				return nil
+			})
 		} else {
-			err = coswss.Listen(gwcfg.Options.Gate.Address, gwcfg.Options.Gate.Websocket)
+			// 使用coswss.New创建WebSocket服务器
+			err = coswss.New(gwcfg.Options.Gate.Address, gwcfg.Options.Gate.Websocket)
 		}
 		if err != nil {
 			return err
