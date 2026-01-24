@@ -61,7 +61,7 @@ var Setting = struct {
 type router func(path string, req values.Metadata) (servicePath, serviceMethod string, err error)
 
 var defaultErrorf = func(err error) []byte {
-	b, _ := json.Marshal(values.Error(err))
+	b, _ := json.Marshal(values.Errorf(0, err))
 	return b
 }
 
