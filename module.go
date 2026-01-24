@@ -122,10 +122,8 @@ func (this *Module) Start() (err error) {
 	// websocket
 	if p.Has(gwcfg.ProtocolTypeWSS) {
 		if p.Has(gwcfg.ProtocolTypeHTTP) {
-			// 使用coswss.Handler()获取WebSocket处理器并绑定到HTTP服务器
-			// 创建一个适配器，将coswss.Handler()转换为cosweb.HandlerFunc
 			HTTP.Server.Register(gwcfg.Options.Gate.Websocket, func(c *cosweb.Context) any {
-				coswss.Handler()(c.Response, c.Request)
+				coswss.Handler(c.Response, c.Request)
 				return nil
 			})
 		} else {

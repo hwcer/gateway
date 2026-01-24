@@ -7,7 +7,7 @@ require (
 	github.com/hwcer/cosnet v1.3.5
 	github.com/hwcer/cosrpc v1.3.3
 	github.com/hwcer/cosweb v1.3.7
-	github.com/hwcer/coswss v0.2.2
+	github.com/hwcer/coswss v0.2.3
 	github.com/hwcer/logger v0.2.8
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 )
