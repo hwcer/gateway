@@ -51,7 +51,7 @@ func proxy(path string, h Context, cookie map[string]string) (reply []byte, err 
 		if b, err = json.Marshal(cookie); err != nil {
 			return nil, err
 		}
-		req[gwcfg.ServiceMetadataCookie] = string(b)
+		req[gwcfg.ServicePlayerCookie] = string(b)
 	}
 	// 获取请求路径
 	//var path string
@@ -115,7 +115,7 @@ func proxy(path string, h Context, cookie map[string]string) (reply []byte, err 
 	}
 
 	// 处理响应
-	res[gwcfg.ServiceMetadataResponseType] = gwcfg.ResponseTypeNone
+	res[gwcfg.ServiceResponseType] = gwcfg.ResponseTypeNone
 
 	// 如果响应元数据只有响应类型，则直接返回
 	if len(res) == 1 {
@@ -129,7 +129,7 @@ func proxy(path string, h Context, cookie map[string]string) (reply []byte, err 
 		if token, err = h.Login(guid, gwcfg.Cookies.Filter(res)); err != nil {
 			return nil, err
 		}
-		res[gwcfg.ServiceMetadataResponseToken] = token
+		res[gwcfg.ServiceResponseToken] = token
 	}
 	// 退出登录：如果响应中包含退出登录标志，则执行退出登录操作
 	if _, ok := res[gwcfg.ServicePlayerLogout]; ok {

@@ -83,7 +83,7 @@ func defaultRequest(p *session.Data, path string, req values.Metadata, args []by
 }
 
 func defaultResponse(p *session.Data, path string, res values.Metadata, data []byte) ([]byte, error) {
-	rt := res.GetString(gwcfg.ServiceMetadataResponseType)
+	rt := res.GetString(gwcfg.ServiceResponseType)
 	if rt == gwcfg.ResponseTypeReceived && p != nil {
 		i := p.Atomic()
 		res[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", -i)

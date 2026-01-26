@@ -4,16 +4,13 @@ const (
 	ServiceMetadataUID       = "uid"
 	ServiceMetadataGUID      = "guid"
 	ServiceMetadataServerId  = "sid"
-	ServiceMetadataDeveloper = "dev"   //开发者身份
-	ServiceMetadataAuthorize = "OAuth" //接口等级
+	ServiceMetadataDeveloper = "dev" //开发者身份
+	ServiceMetadataAccess    = "acc" //接口等级
 
-	ServiceMetadataSocketId      = "_s_id"
-	ServiceMetadataClientIp      = "_c_ip"
-	ServiceMetadataRequestId     = "_r_id"    //Request id
-	ServiceMetadataResponseType  = "_r_t"     //ResponseType 其中一种,仅仅内部使用
-	ServiceMetadataResponseToken = "_r_token" //仅仅服务器登录时，通过response metadata 传递给 Response
-	ServiceMetadataGateway       = "_g_w"
-	ServiceMetadataCookie        = "cookie"
+	ServiceMetadataSocketId  = "sock"
+	ServiceMetadataGateway   = "gate"
+	ServiceMetadataClientIp  = "_uip"
+	ServiceMetadataRequestId = "_rid" //Request id
 
 	ServiceMessagePath    = "_msg_path"
 	ServiceMessageIgnore  = "_msg_ignore"
@@ -21,10 +18,14 @@ const (
 
 	ServicePlayerLogin  = "_player_login"
 	ServicePlayerLogout = "_player_logout"
+	ServicePlayerCookie = "_player_cookie"
 
 	ServicePlayerChannelJoin  = "player.join."     //已经加入的房间
 	ServicePlayerChannelLeave = "player.leave."    //离开房间
 	ServicePlayerSelector     = "player.selector." //服务器重定向
+
+	ServiceResponseType  = "_res_type"  //ResponseType 其中一种,仅仅内部使用
+	ServiceResponseToken = "_res_token" //仅仅服务器登录时，通过response metadata 传递给 Response
 
 )
 

@@ -86,7 +86,7 @@ func send(c *cosrpc.Context) any {
 	if len(path) == 0 {
 		return nil //仅仅设置信息，不需要发送
 	}
-	mate[gwcfg.ServiceMetadataResponseType] = gwcfg.ResponseTypeReceived
+	mate[gwcfg.ServiceResponseType] = gwcfg.ResponseTypeReceived
 	body, err := Setting.Response(p, path, mate, c.Bytes())
 	if err != nil {
 		return err

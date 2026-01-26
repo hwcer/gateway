@@ -49,7 +49,7 @@ func (this *access) Verify(c Context, req values.Metadata, servicePath, serviceM
 	if err != nil {
 		return nil, err
 	}
-	req.Set(gwcfg.ServiceMetadataAuthorize, l)
+	req.Set(gwcfg.ServiceMetadataAccess, l)
 	return p, nil
 }
 
