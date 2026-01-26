@@ -1,11 +1,11 @@
 package gwcfg
 
 const (
-	ServiceMetadataUID       = "uid"
-	ServiceMetadataGUID      = "guid"
-	ServiceMetadataServerId  = "sid"
-	ServiceMetadataDeveloper = "dev" //开发者身份
-	ServiceMetadataAccess    = "acc" //接口等级
+	ServiceMetadataUID        = "uid"
+	ServiceMetadataGUID       = "guid"
+	ServiceMetadataServerId   = "sid"
+	ServiceMetadataDeveloper  = "dev" //开发者身份
+	ServiceMetadataPermission = "per" //接口等级
 
 	ServiceMetadataSocketId  = "sock"
 	ServiceMetadataGateway   = "gate"
