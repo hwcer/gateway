@@ -24,8 +24,7 @@ const (
 	ServicePlayerChannelLeave = "player.leave."    //离开房间
 	ServicePlayerSelector     = "player.selector." //服务器重定向
 
-	ServiceResponseType  = "_res_type"  //ResponseType 其中一种,仅仅内部使用
-	ServiceResponseToken = "_res_token" //仅仅服务器登录时，通过response metadata 传递给 Response
+	ServiceResponseModel = "_res_mod" //ResponseType 其中一种,仅仅内部使用
 
 )
 

@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 	"github.com/hwcer/gateway/token"
 
-	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
@@ -141,14 +141,14 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 		return err
 	}
 	// 创建 socket 代理并登录
-	h := socketProxy{Context: c}
+	h := SocketContext{Context: c}
 	vs := values.Values{}
 	if data.Developer {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, "1")
 	} else {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, "")
 	}
-	if _, err = h.Login(data.Openid, vs); err != nil {
+	if _, err = h.login(data.Openid, vs); err != nil {
 		return err
 	}
 
@@ -157,7 +157,7 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	}
 
 	var reply []byte
-	if reply, err = proxy(Setting.G2SOAuth, &h, nil); err != nil {
+	if reply, err = proxy(Setting.G2SOAuth, &h); err != nil {
 		return err
 	}
 	return reply
@@ -241,17 +241,17 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 	if err != nil {
 		return err
 	}
-	h := socketProxy{Context: c}
-	reply, err := proxy(path, &h, nil)
+	h := SocketContext{Context: c}
+	reply, err := proxy(path, &h)
 	if err != nil {
 		return err
 	}
 	return reply
 }
 
-// socketProxy socket代理结构体
-// 实现gwcfg.Context接口，用于TCP请求的代理
-type socketProxy struct {
+// SocketContext socket代理结构体
+// 实现 gwcfg.Context 接口，用于TCP请求的代理
+type SocketContext struct {
 	*cosnet.Context
 }
 
@@ -259,7 +259,7 @@ type socketProxy struct {
 // 返回值:
 //   - *session.Data: 会话数据
 //   - error: 验证过程中的错误
-func (this *socketProxy) Verify() (*session.Data, error) {
+func (this *SocketContext) verify() (*session.Data, error) {
 	data := this.Context.Socket.Data()
 	if data == nil {
 		return nil, session.ErrorSessionNotExist
@@ -275,7 +275,7 @@ func (this *socketProxy) Verify() (*session.Data, error) {
 // 返回值:
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
-func (this *socketProxy) Login(guid string, value values.Values) (token string, err error) {
+func (this *SocketContext) login(guid string, value values.Values) (token string, err error) {
 	data := this.Context.Socket.Data()
 	if data != nil {
 		if data.UUID() != guid {
@@ -291,15 +291,21 @@ func (this *socketProxy) Login(guid string, value values.Values) (token string, 
 // Logout 登出
 // 返回值:
 //   - error: 登出过程中的错误
-func (this *socketProxy) Logout() error {
+func (this *SocketContext) logout() error {
 	this.Context.Socket.Close()
+	return nil
+}
+func (this *SocketContext) Session() *session.Session {
+	if p := this.Context.Socket.Data(); p != nil {
+		return session.New(p)
+	}
 	return nil
 }
 
 // Socket 获取socket
 // 返回值:
 //   - *cosnet.Socket: cosnet socket
-func (this *socketProxy) Socket() *cosnet.Socket {
+func (this *SocketContext) Socket() *cosnet.Socket {
 	return this.Context.Socket
 }
 
@@ -307,15 +313,24 @@ func (this *socketProxy) Socket() *cosnet.Socket {
 // 返回值:
 //   - *bytes.Buffer: 请求体缓冲区
 //   - error: 获取过程中的错误
-func (this *socketProxy) Buffer() (buf *bytes.Buffer, err error) {
+func (this *SocketContext) Buffer() (buf *bytes.Buffer, err error) {
 	buff := bytes.NewBuffer(this.Context.Message.Body())
 	return buff, nil
+}
+func (this *SocketContext) Header() values.Metadata {
+	// 设置 Content-Type
+	r := make(values.Metadata)
+	magic := this.Message.Magic()
+	b := magic.Binder.Name()
+	r.Set(binder.HeaderAccept, b)
+	r.Set(binder.HeaderContentType, b)
+	return r
 }
 
 // Metadata 获取请求元数据
 // 返回值:
 //   - values.Metadata: 请求元数据
-func (this *socketProxy) Metadata() values.Metadata {
+func (this *SocketContext) Metadata() values.Metadata {
 	meta := values.Metadata{}
 	if _, q, _ := this.Context.Path(); q != "" {
 		query, _ := url.ParseQuery(q)
@@ -323,8 +338,6 @@ func (this *socketProxy) Metadata() values.Metadata {
 			meta[k] = query.Get(k)
 		}
 	}
-	magic := this.Message.Magic()
-	meta[binder.HeaderContentType] = magic.Binder.Name()
 	meta[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
 	return meta
 }
@@ -332,7 +345,7 @@ func (this *socketProxy) Metadata() values.Metadata {
 // RemoteAddr 获取远程地址
 // 返回值:
 //   - string: 远程地址
-func (this *socketProxy) RemoteAddr() string {
+func (this *SocketContext) RemoteAddr() string {
 	ip := this.Context.RemoteAddr().String()
 	if i := strings.Index(ip, ":"); i > 0 {
 		ip = ip[0:i]

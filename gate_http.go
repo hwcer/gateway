@@ -141,7 +141,7 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 		return err
 	}
 	// 创建 http 代理并登录
-	h := httpProxy{Context: c}
+	h := HttpContent{Context: c}
 	vs := values.Values{}
 	if data.Developer {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, "1")
@@ -152,14 +152,14 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	// 构建响应
 	cookie := map[string]string{}
 	cookie["key"] = session.Options.Name
-	if cookie["val"], err = h.Login(data.Openid, vs); err != nil {
+	if cookie["val"], err = h.login(data.Openid, vs); err != nil {
 		return err
 	}
 	if Setting.G2SOAuth == "" {
 		return cookie
 	}
 	var reply []byte
-	if reply, err = proxy(Setting.G2SOAuth, &h, cookie); err != nil {
+	if reply, err = proxy(Setting.G2SOAuth, &h); err != nil {
 		return err
 	}
 	return reply
@@ -173,19 +173,20 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 //   - any: 代理结果
 func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 	// 创建 http 代理并处理请求
-	h := httpProxy{Context: c}
-	reply, err := proxy(c.Request.URL.Path, &h, nil)
+	h := HttpContent{Context: c}
+	reply, err := proxy(c.Request.URL.Path, &h)
 	if err != nil {
 		return err
 	}
 	return reply
 }
 
-// httpProxy HTTP代理结构体
+// HttpContent HTTP代理结构体
 // 实现gwcfg.Context接口，用于HTTP请求的代理
-type httpProxy struct {
+type HttpContent struct {
 	*cosweb.Context
-	uri      *url.URL
+	uri *url.URL
+	//data *session.Data
 	cookie   *http.Cookie
 	metadata values.Metadata
 }
@@ -198,7 +199,7 @@ type httpProxy struct {
 // 返回值:
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
-func (this *httpProxy) Login(guid string, value values.Values) (token string, err error) {
+func (this *HttpContent) login(guid string, value values.Values) (token string, err error) {
 	var data *session.Data
 	token, data, err = players.Login(guid, value)
 	if err != nil {
@@ -211,7 +212,7 @@ func (this *httpProxy) Login(guid string, value values.Values) (token string, er
 	cookie := &http.Cookie{Name: session.Options.Name, Path: "/", Value: token}
 	http.SetCookie(this.Context.Response, cookie)
 	// 设置响应头
-	header := this.Header()
+	header := this.Context.Header()
 	header.Set("X-Forwarded-Key", session.Options.Name)
 	header.Set("X-Forwarded-Val", cookie.Value)
 	//this.Context.Set(session.Setting.Name, cookie.Value)
@@ -223,7 +224,7 @@ func (this *httpProxy) Login(guid string, value values.Values) (token string, er
 // Logout 登出
 // 返回值:
 //   - error: 登出过程中的错误
-func (this *httpProxy) Logout() error {
+func (this *HttpContent) logout() error {
 	return this.Context.Session.Delete()
 }
 
@@ -231,19 +232,20 @@ func (this *httpProxy) Logout() error {
 // 返回值:
 //   - *session.Data: 会话数据
 //   - error: 验证过程中的错误
-func (this *httpProxy) Verify() (*session.Data, error) {
+func (this *HttpContent) verify() (*session.Data, error) {
 	// 如果会话已存在且有效，直接返回
 	if this.Context.Session != nil && this.Context.Session.Data != nil {
 		return this.Context.Session.Data, nil
 	}
-	// 获取token
+	// 获取 token
 	var s string
 	if this.cookie != nil {
 		s = this.cookie.Value
 	} else {
 		s = this.Context.GetString(session.Options.Name, cosweb.RequestDataTypeCookie, cosweb.RequestDataTypeQuery, cosweb.RequestDataTypeHeader)
 	}
-	// 验证token
+
+	// 验证 token
 	if s == "" {
 		return nil, values.Error("token empty")
 	}
@@ -253,28 +255,39 @@ func (this *httpProxy) Verify() (*session.Data, error) {
 	return this.Context.Session.Data, nil
 }
 
+func (this *HttpContent) Header() values.Metadata {
+	// 设置 Content-Type
+	r := make(values.Metadata)
+	if t := this.getContentType(binder.HeaderContentType, ";"); t != "" {
+		r.Set(binder.HeaderContentType, t)
+	} else {
+		r.Set(binder.HeaderContentType, gwcfg.Options.Binder)
+	}
+	// 设置 Accept
+	if t := this.getContentType(binder.HeaderAccept, ","); t != "" {
+		r.Set(binder.HeaderAccept, t)
+	}
+	return r
+}
+func (this *HttpContent) Session() *session.Session {
+	if ss := this.Context.Session; ss != nil && ss.Data != nil {
+		return ss
+	}
+	return nil
+}
+
 // Metadata 获取请求元数据
 // 返回值:
 //   - values.Metadata: 请求元数据
-func (this *httpProxy) Metadata() values.Metadata {
+func (this *HttpContent) Metadata() values.Metadata {
 	if this.metadata != nil {
 		return this.metadata
 	}
 	this.metadata = make(values.Metadata)
-	// 从URL查询参数中获取元数据
+	// 从 URL 查询参数中获取元数据
 	q := this.Context.Request.URL.Query()
 	for k, _ := range q {
 		this.metadata[k] = q.Get(k)
-	}
-	// 设置Content-Type
-	if t := this.getContentType(binder.HeaderContentType, ";"); t != "" {
-		this.metadata.Set(binder.HeaderContentType, t)
-	} else {
-		this.metadata.Set(binder.HeaderContentType, gwcfg.Options.Binder)
-	}
-	// 设置Accept
-	if t := this.getContentType(binder.HeaderAccept, ","); t != "" {
-		this.metadata.Set(binder.HeaderAccept, t)
 	}
 	return this.metadata
 }
@@ -282,7 +295,7 @@ func (this *httpProxy) Metadata() values.Metadata {
 // RemoteAddr 获取远程地址
 // 返回值:
 //   - string: 远程地址
-func (this *httpProxy) RemoteAddr() string {
+func (this *HttpContent) RemoteAddr() string {
 	ip := this.Context.RemoteAddr()
 	if i := strings.Index(ip, ":"); i > 0 {
 		ip = ip[0:i]
@@ -298,7 +311,7 @@ func (this *httpProxy) RemoteAddr() string {
 //
 // 返回值:
 //   - string: 内容类型
-func (this *httpProxy) getContentType(name string, split string) string {
+func (this *HttpContent) getContentType(name string, split string) string {
 	t := this.Context.Request.Header.Get(name)
 	if t == "" {
 		return ""

@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -30,7 +29,7 @@ var ElapsedMillisecond = 500 * time.Millisecond
 // 返回值:
 //   - reply: 服务返回的数据
 //   - err: 处理过程中的错误
-func proxy(path string, h Context, cookie map[string]string) (reply []byte, err error) {
+func proxy(path string, h Context) (reply []byte, err error) {
 	// 异常捕获和错误处理
 	defer func() {
 		if e := recover(); e != nil {
@@ -45,14 +44,7 @@ func proxy(path string, h Context, cookie map[string]string) (reply []byte, err 
 	// 获取请求元数据和创建响应元数据
 	req := h.Metadata()
 	res := make(values.Metadata)
-	// HTTP认证时将COOKIE传到服务器，由服务器封装响应信息以应对部分UNITY无法直接使用cookie的情况
-	if cookie != nil {
-		var b []byte
-		if b, err = json.Marshal(cookie); err != nil {
-			return nil, err
-		}
-		req[gwcfg.ServicePlayerCookie] = string(b)
-	}
+
 	// 获取请求路径
 	//var path string
 	//if path, err = h.Path(); err != nil {
@@ -90,7 +82,7 @@ func proxy(path string, h Context, cookie map[string]string) (reply []byte, err 
 	}
 
 	// 处理请求：可以在这里对请求进行预处理
-	body, err := Setting.Request(p, path, req, buff.Bytes())
+	body, err := Setting.Request(h, path, req, buff.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +107,7 @@ func proxy(path string, h Context, cookie map[string]string) (reply []byte, err 
 	}
 
 	// 处理响应
-	res[gwcfg.ServiceResponseType] = gwcfg.ResponseTypeNone
+	res[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeNone
 
 	// 如果响应元数据只有响应类型，则直接返回
 	if len(res) == 1 {
@@ -126,14 +118,14 @@ func proxy(path string, h Context, cookie map[string]string) (reply []byte, err 
 	// 创建登录信息：如果响应中包含登录标志，则执行登录操作
 	if guid, ok := res[gwcfg.ServicePlayerLogin]; ok {
 		var token string
-		if token, err = h.Login(guid, gwcfg.Cookies.Filter(res)); err != nil {
+		if token, err = h.login(guid, gwcfg.Cookies.Filter(res)); err != nil {
 			return nil, err
 		}
-		res[gwcfg.ServiceResponseToken] = token
+		res[gwcfg.ServicePlayerCookie] = token
 	}
 	// 退出登录：如果响应中包含退出登录标志，则执行退出登录操作
 	if _, ok := res[gwcfg.ServicePlayerLogout]; ok {
-		if err = h.Logout(); err != nil {
+		if err = h.logout(); err != nil {
 			return nil, err
 		} else if p != nil {
 			players.Delete(p)
@@ -141,7 +133,7 @@ func proxy(path string, h Context, cookie map[string]string) (reply []byte, err 
 		p = nil
 	}
 
-	// 更新用户会话的cookies信息
+	// 更新用户会话的 cookies 信息
 	if p != nil {
 		CookiesUpdate(res, p)
 	}

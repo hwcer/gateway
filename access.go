@@ -54,7 +54,7 @@ func (this *access) Verify(c Context, req values.Metadata, servicePath, serviceM
 }
 
 func (this *access) oauth(r Context, req values.Metadata) (p *session.Data, err error) {
-	if p, err = r.Verify(); err != nil {
+	if p, err = r.verify(); err != nil {
 		return nil, err
 	} else if p == nil {
 		return nil, errors.ErrLogin
