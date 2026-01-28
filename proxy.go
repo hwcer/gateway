@@ -121,6 +121,9 @@ func proxy(path string, h Context) (reply []byte, err error) {
 		if token, err = h.login(guid, gwcfg.Cookies.Filter(res)); err != nil {
 			return nil, err
 		}
+		if ss := h.Session(); ss != nil {
+			p = ss.Data
+		}
 		res[gwcfg.ServicePlayerCookie] = token
 	}
 	// 退出登录：如果响应中包含退出登录标志，则执行退出登录操作

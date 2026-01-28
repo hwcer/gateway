@@ -187,7 +187,7 @@ type HttpContent struct {
 	*cosweb.Context
 	uri *url.URL
 	//data *session.Data
-	cookie   *http.Cookie
+	//cookie   *http.Cookie
 	metadata values.Metadata
 }
 
@@ -216,8 +216,8 @@ func (this *HttpContent) login(guid string, value values.Values) (token string, 
 	header.Set("X-Forwarded-Key", session.Options.Name)
 	header.Set("X-Forwarded-Val", cookie.Value)
 	//this.Context.Set(session.Setting.Name, cookie.Value)
-	this.cookie = cookie
-
+	//this.cookie = cookie
+	this.Context.Session = session.New(data)
 	return
 }
 
@@ -238,13 +238,13 @@ func (this *HttpContent) verify() (*session.Data, error) {
 		return this.Context.Session.Data, nil
 	}
 	// 获取 token
-	var s string
-	if this.cookie != nil {
-		s = this.cookie.Value
-	} else {
-		s = this.Context.GetString(session.Options.Name, cosweb.RequestDataTypeCookie, cosweb.RequestDataTypeQuery, cosweb.RequestDataTypeHeader)
-	}
-
+	//var s string
+	//if this.cookie != nil {
+	//	s = this.cookie.Value
+	//} else {
+	//	s = this.Context.GetString(session.Options.Name, cosweb.RequestDataTypeCookie, cosweb.RequestDataTypeQuery, cosweb.RequestDataTypeHeader)
+	//}
+	s := this.Context.GetString(session.Options.Name, cosweb.RequestDataTypeCookie, cosweb.RequestDataTypeQuery, cosweb.RequestDataTypeHeader)
 	// 验证 token
 	if s == "" {
 		return nil, values.Error("token empty")
