@@ -58,7 +58,7 @@ func Join(p *session.Data, name string, value string) {
 //	value - 频道参数
 func Leave(p *session.Data, name string, value string) {
 	setter := NewSetter(p)
-	setter.Leave(name)
+	setter.Leave(name, value)
 	leave(p, name, value)
 }
 

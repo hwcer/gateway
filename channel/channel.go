@@ -88,10 +88,10 @@ func (this *Channel) Release() {
 // removeAllPlayer 房间销毁时，清理所有房间内的成员
 // 注意：该方法只能在已获取写锁的情况下调用
 func (this *Channel) removeAllPlayer() {
-	k, _ := Split(this.id)
+	k, v := Split(this.id)
 	for _, d := range this.ps {
 		setter := NewSetter(d)
-		setter.Leave(k)
+		setter.Leave(k, v)
 	}
 }
 

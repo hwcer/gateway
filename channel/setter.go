@@ -44,9 +44,13 @@ func (s *Setter) Join(name, value string) (old string, ok bool) {
 	return
 }
 
-func (s *Setter) Leave(name string) {
+func (s *Setter) Leave(name string, value string) bool {
 	rk := s.Name(name)
+	if old, ok := s.get(rk); ok && old != value {
+		return false
+	}
 	s.Data.Delete(rk)
+	return true
 }
 
 // Get 获取是否在频道中以及频道值
