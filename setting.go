@@ -92,7 +92,8 @@ func defaultResponse(c Context, path string, res values.Metadata, data []byte) (
 	}
 	p := ss.Data
 	rt := res.GetString(gwcfg.ServiceResponseModel)
-	if rt == gwcfg.ResponseTypeReceived {
+	rid := res.GetInt32(gwcfg.ServiceMetadataRequestId)
+	if rid == 0 && rt == gwcfg.ResponseTypeReceived {
 		i := p.Atomic()
 		res[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", -i)
 	}
