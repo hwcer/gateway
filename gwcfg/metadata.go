@@ -31,5 +31,5 @@ const (
 const (
 	ResponseTypeNone      = "0" //常规响应
 	ResponseTypeReceived  = "1" //收到推送消息
-	ResponseTypeBroadcast = "2" //收到广播消息
+	ResponseTypeBroadcast = "2" //收到广播消息,一次广播只调用一次，session.Data 为空(调用时不针对任何用户，仅仅处理包体)
 )

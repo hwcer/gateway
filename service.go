@@ -107,7 +107,7 @@ func send(c *cosrpc.Context) any {
 func broadcast(c *cosrpc.Context) any {
 	path := c.GetMetadata(gwcfg.ServiceMessagePath)
 	//logger.Debug("广播消息:%v", path)
-	//mate := c.Metadata()
+
 	ignore := c.GetMetadata(gwcfg.ServiceMessageIgnore)
 	ignoreMap := make(map[string]struct{})
 	if ignore != "" {
@@ -116,7 +116,12 @@ func broadcast(c *cosrpc.Context) any {
 			ignoreMap[v] = struct{}{}
 		}
 	}
-
+	mate := c.Metadata()
+	mate[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeBroadcast
+	body, err := Setting.Response(nil, path, mate, c.Bytes())
+	if err != nil {
+		return err
+	}
 	players.Range(func(p *session.Data) bool {
 		uid := p.GetString(gwcfg.ServiceMetadataUID)
 		if _, ok := ignoreMap[uid]; ok {
@@ -125,7 +130,7 @@ func broadcast(c *cosrpc.Context) any {
 		//CookiesUpdate(mate, p)
 		//Emitter.emit(EventTypeBroadcast, p, path, nil)
 		if sock := players.Socket(p); sock != nil {
-			sock.Send(0, path, c.Bytes())
+			sock.Send(0, path, body)
 		}
 		return true
 	})
