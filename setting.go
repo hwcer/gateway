@@ -45,7 +45,7 @@ var Setting = struct {
 	C2SOAuth    string                                                                          //网关登录,置空时不启用默认验证方式
 	G2SOAuth    string                                                                          //游戏服登录验证,网关登录登录成功后继续使用GUID去游戏服验证,留空不进行验证
 	Request     func(c Context, path string, req values.Metadata, args []byte) ([]byte, error)  //网关转发消息时,如果数据有加密，可以在解密之后转发
-	Response    func(c Context, path string, res values.Metadata, reply []byte) ([]byte, error) //rpc 返回数据时,推送消息时只有Session
+	Response    func(c Context, path string, res values.Metadata, reply []byte) ([]byte, error) //rpc 返回数据时,推送消息时只有Session,广播时 Context为NIL
 	Serialize   func(accept Accept, reply any) ([]byte, error)                                  //序列化方式
 	S2CSecret   func(sock *cosnet.Socket, secret string)                                        //登录成功时给客户端发送秘钥,空值不处理
 	S2CReplaced func(sock *cosnet.Socket, address string)                                       //被顶号时给客户端发送的顶号提示,空值不处理
@@ -83,6 +83,9 @@ func defaultRequest(c Context, path string, req values.Metadata, args []byte) ([
 }
 
 func defaultResponse(c Context, path string, res values.Metadata, data []byte) ([]byte, error) {
+	if c == nil {
+		return data, nil
+	}
 	ss := c.Session()
 	if ss == nil || ss.Data == nil {
 		return data, nil

@@ -5,6 +5,7 @@ import (
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
+	"github.com/hwcer/cosnet"
 )
 
 type Context interface {
@@ -23,4 +24,32 @@ type Proxy interface {
 	Verify() (*session.Data, error)                         //验证登录信息
 	Buffer() (buf *bytes.Buffer, err error)                 //数据包
 
+}
+
+// Received 收到消息时使用的 Context
+type Received struct {
+	socket *cosnet.Socket
+}
+
+func (this *Received) Header() map[string]string {
+	return nil
+}
+func (this *Received) Session() *session.Session {
+	if this.socket == nil {
+		return nil
+	}
+	data := this.socket.Data()
+	if data == nil {
+		return nil
+	}
+	return session.New(data)
+}
+func (this *Received) Metadata() values.Metadata {
+	return nil
+}
+func (this *Received) RemoteAddr() string {
+	if this.socket == nil {
+		return ""
+	}
+	return this.socket.RemoteAddr().String()
 }
