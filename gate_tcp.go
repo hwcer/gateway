@@ -141,14 +141,14 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 		return err
 	}
 	// 创建 socket 代理并登录
-	h := SocketContext{Context: c}
+	ctx := SocketContext{Context: c}
 	vs := values.Values{}
 	if data.Developer {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, "1")
 	} else {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, "")
 	}
-	if _, err = h.login(data.Openid, vs); err != nil {
+	if _, err = ctx.Login(data.Openid, vs); err != nil {
 		return err
 	}
 
@@ -157,7 +157,7 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	}
 
 	var reply []byte
-	if reply, err = proxy(Setting.G2SOAuth, &h); err != nil {
+	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
 		return err
 	}
 	return reply
@@ -241,8 +241,8 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 	if err != nil {
 		return err
 	}
-	h := SocketContext{Context: c}
-	reply, err := proxy(path, &h)
+	ctx := SocketContext{Context: c}
+	reply, err := proxyRequest(&ctx, path)
 	if err != nil {
 		return err
 	}
@@ -259,7 +259,7 @@ type SocketContext struct {
 // 返回值:
 //   - *session.Data: 会话数据
 //   - error: 验证过程中的错误
-func (this *SocketContext) verify() (*session.Data, error) {
+func (this *SocketContext) Verify() (*session.Data, error) {
 	data := this.Context.Socket.Data()
 	if data == nil {
 		return nil, session.ErrorSessionNotExist
@@ -275,7 +275,7 @@ func (this *SocketContext) verify() (*session.Data, error) {
 // 返回值:
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
-func (this *SocketContext) login(guid string, value values.Values) (token string, err error) {
+func (this *SocketContext) Login(guid string, value values.Values) (token string, err error) {
 	data := this.Context.Socket.Data()
 	if data != nil {
 		if data.UUID() != guid {
@@ -291,7 +291,7 @@ func (this *SocketContext) login(guid string, value values.Values) (token string
 // Logout 登出
 // 返回值:
 //   - error: 登出过程中的错误
-func (this *SocketContext) logout() error {
+func (this *SocketContext) Logout() error {
 	this.Context.Socket.Close()
 	return nil
 }
@@ -317,13 +317,13 @@ func (this *SocketContext) Buffer() (buf *bytes.Buffer, err error) {
 	buff := bytes.NewBuffer(this.Context.Message.Body())
 	return buff, nil
 }
-func (this *SocketContext) Header() values.Metadata {
+func (this *SocketContext) Header() map[string]string {
 	// 设置 Content-Type
-	r := make(values.Metadata)
+	r := make(map[string]string)
 	magic := this.Message.Magic()
 	b := magic.Binder.Name()
-	r.Set(binder.HeaderAccept, b)
-	r.Set(binder.HeaderContentType, b)
+	r[binder.HeaderAccept] = b
+	r[binder.HeaderContentType] = b
 	return r
 }
 

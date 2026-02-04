@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"net"
 	"net/http"
 	"net/url"
@@ -141,7 +142,7 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 		return err
 	}
 	// 创建 http 代理并登录
-	h := HttpContent{Context: c}
+	ctx := HttpContent{Context: c}
 	vs := values.Values{}
 	if data.Developer {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, "1")
@@ -152,14 +153,14 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	// 构建响应
 	cookie := map[string]string{}
 	cookie["key"] = session.Options.Name
-	if cookie["val"], err = h.login(data.Openid, vs); err != nil {
+	if cookie["val"], err = ctx.Login(data.Openid, vs); err != nil {
 		return err
 	}
 	if Setting.G2SOAuth == "" {
 		return cookie
 	}
 	var reply []byte
-	if reply, err = proxy(Setting.G2SOAuth, &h); err != nil {
+	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
 		return err
 	}
 	return reply
@@ -173,8 +174,8 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 //   - any: 代理结果
 func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 	// 创建 http 代理并处理请求
-	h := HttpContent{Context: c}
-	reply, err := proxy(c.Request.URL.Path, &h)
+	ctx := HttpContent{Context: c}
+	reply, err := proxyRequest(&ctx, c.Request.URL.Path)
 	if err != nil {
 		return err
 	}
@@ -199,7 +200,7 @@ type HttpContent struct {
 // 返回值:
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
-func (this *HttpContent) login(guid string, value values.Values) (token string, err error) {
+func (this *HttpContent) Login(guid string, value values.Values) (token string, err error) {
 	var data *session.Data
 	token, data, err = players.Login(guid, value)
 	if err != nil {
@@ -224,7 +225,7 @@ func (this *HttpContent) login(guid string, value values.Values) (token string, 
 // Logout 登出
 // 返回值:
 //   - error: 登出过程中的错误
-func (this *HttpContent) logout() error {
+func (this *HttpContent) Logout() error {
 	return this.Context.Session.Delete()
 }
 
@@ -232,7 +233,7 @@ func (this *HttpContent) logout() error {
 // 返回值:
 //   - *session.Data: 会话数据
 //   - error: 验证过程中的错误
-func (this *HttpContent) verify() (*session.Data, error) {
+func (this *HttpContent) Verify() (*session.Data, error) {
 	// 如果会话已存在且有效，直接返回
 	if this.Context.Session != nil && this.Context.Session.Data != nil {
 		return this.Context.Session.Data, nil
@@ -255,17 +256,29 @@ func (this *HttpContent) verify() (*session.Data, error) {
 	return this.Context.Session.Data, nil
 }
 
-func (this *HttpContent) Header() values.Metadata {
+func (this *HttpContent) Buffer() (buf *bytes.Buffer, err error) {
+	return this.Context.Buffer()
+}
+
+func (this *HttpContent) Header() map[string]string {
 	// 设置 Content-Type
-	r := make(values.Metadata)
-	if t := this.getContentType(binder.HeaderContentType, ";"); t != "" {
-		r.Set(binder.HeaderContentType, t)
-	} else {
-		r.Set(binder.HeaderContentType, gwcfg.Options.Binder)
-	}
-	// 设置 Accept
-	if t := this.getContentType(binder.HeaderAccept, ","); t != "" {
-		r.Set(binder.HeaderAccept, t)
+	r := make(map[string]string)
+	header := this.Context.Header()
+	for k, _ := range header {
+		switch k {
+		case binder.HeaderContentType:
+			if t := this.getContentType(binder.HeaderContentType, ";"); t != "" {
+				r[k] = t
+			} else {
+				r[k] = gwcfg.Options.Binder
+			}
+		case binder.HeaderAccept:
+			if t := this.getContentType(binder.HeaderAccept, ";"); t != "" {
+				r[k] = t
+			}
+		default:
+			r[k] = header.Get(k)
+		}
 	}
 	return r
 }

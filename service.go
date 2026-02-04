@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -20,6 +21,33 @@ func init() {
 	Register(send)
 	Register(write)
 	Register(broadcast)
+}
+
+type broadcastContext struct {
+	socket *cosnet.Socket
+}
+
+func (this *broadcastContext) Header() map[string]string {
+	return map[string]string{}
+}
+func (this *broadcastContext) Session() *session.Session {
+	if this.socket == nil {
+		return nil
+	}
+	data := this.socket.Data()
+	if data == nil {
+		return nil
+	}
+	return session.New(data)
+}
+func (this *broadcastContext) Metadata() values.Metadata {
+	return values.Metadata{}
+}
+func (this *broadcastContext) RemoteAddr() string {
+	if this.socket == nil {
+		return ""
+	}
+	return this.socket.RemoteAddr().String()
 }
 
 // Register 注册协议，用于服务器推送消息
@@ -49,7 +77,15 @@ func write(c *cosrpc.Context) any {
 	if len(path) == 0 {
 		return nil //仅仅设置信息，不需要发送
 	}
-	sock.Send(0, path, c.Bytes())
+	mate := c.Metadata()
+	mate[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeReceived
+	ctx := broadcastContext{socket: sock}
+	body, err := Setting.Response(&ctx, path, mate, c.Bytes())
+	if err != nil {
+		return err
+	}
+
+	sock.Send(0, path, body)
 	return nil
 }
 
@@ -87,8 +123,8 @@ func send(c *cosrpc.Context) any {
 		return nil //仅仅设置信息，不需要发送
 	}
 	mate[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeReceived
-
-	body, err := Setting.Response(p, path, mate, c.Bytes())
+	ctx := broadcastContext{socket: sock}
+	body, err := Setting.Response(&ctx, path, mate, c.Bytes())
 	if err != nil {
 		return err
 	}
@@ -118,7 +154,7 @@ func broadcast(c *cosrpc.Context) any {
 	}
 	mate := c.Metadata()
 	mate[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeBroadcast
-	body, err := Setting.Response(nil, path, mate, c.Bytes())
+	body, err := Setting.Response(&broadcastContext{}, path, mate, c.Bytes())
 	if err != nil {
 		return err
 	}

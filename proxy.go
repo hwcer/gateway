@@ -29,7 +29,7 @@ var ElapsedMillisecond = 500 * time.Millisecond
 // 返回值:
 //   - reply: 服务返回的数据
 //   - err: 处理过程中的错误
-func proxy(path string, h Context) (reply []byte, err error) {
+func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
 	// 异常捕获和错误处理
 	defer func() {
 		if e := recover(); e != nil {
@@ -42,7 +42,7 @@ func proxy(path string, h Context) (reply []byte, err error) {
 	}()
 
 	// 获取请求元数据和创建响应元数据
-	req := h.Metadata()
+	req := ctx.Metadata()
 	res := make(values.Metadata)
 
 	// 获取请求路径
@@ -62,7 +62,7 @@ func proxy(path string, h Context) (reply []byte, err error) {
 	}
 
 	// 权限验证：验证用户是否有权限访问该服务和方法
-	if p, err = Access.Verify(h, req, servicePath, serviceMethod); err != nil {
+	if p, err = Access.Verify(ctx, req, servicePath, serviceMethod); err != nil {
 		return nil, err
 	}
 
@@ -77,12 +77,12 @@ func proxy(path string, h Context) (reply []byte, err error) {
 
 	// 获取请求体
 	var buff *bytes.Buffer
-	if buff, err = h.Buffer(); err != nil {
+	if buff, err = ctx.Buffer(); err != nil {
 		return nil, err
 	}
 
 	// 处理请求：可以在这里对请求进行预处理
-	body, err := Setting.Request(h, path, req, buff.Bytes())
+	body, err := Setting.Request(ctx, path, req, buff.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -118,17 +118,17 @@ func proxy(path string, h Context) (reply []byte, err error) {
 	// 创建登录信息：如果响应中包含登录标志，则执行登录操作
 	if guid, ok := res[gwcfg.ServicePlayerLogin]; ok {
 		var token string
-		if token, err = h.login(guid, gwcfg.Cookies.Filter(res)); err != nil {
+		if token, err = ctx.Login(guid, gwcfg.Cookies.Filter(res)); err != nil {
 			return nil, err
 		}
-		if ss := h.Session(); ss != nil {
+		if ss := ctx.Session(); ss != nil {
 			p = ss.Data
 		}
 		res[gwcfg.ServicePlayerCookie] = token
 	}
 	// 退出登录：如果响应中包含退出登录标志，则执行退出登录操作
 	if _, ok := res[gwcfg.ServicePlayerLogout]; ok {
-		if err = h.logout(); err != nil {
+		if err = ctx.Logout(); err != nil {
 			return nil, err
 		} else if p != nil {
 			players.Delete(p)
@@ -141,7 +141,7 @@ func proxy(path string, h Context) (reply []byte, err error) {
 		CookiesUpdate(res, p)
 	}
 	// 可以在这里对响应进行后处理
-	reply, err = Setting.Response(p, path, res, reply)
+	reply, err = Setting.Response(ctx, path, res, reply)
 	if err != nil {
 		return nil, err
 	}
