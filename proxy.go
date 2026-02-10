@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc/selector"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
@@ -107,7 +108,10 @@ func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
 	}
 
 	// 处理响应
-	res[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeNone
+
+	flag := message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
+	flag.Set(message.FlagIsACK)
+	res[gwcfg.ServiceResponseFlag] = fmt.Sprintf("%d", flag)
 
 	// 如果响应元数据只有响应类型，则直接返回
 	if len(res) == 1 {

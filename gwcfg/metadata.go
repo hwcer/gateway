@@ -24,12 +24,6 @@ const (
 	ServicePlayerChannelLeave = "player.leave."    //离开房间
 	ServicePlayerSelector     = "player.selector." //服务器重定向
 
-	ServiceResponseModel = "_res_mod" //ResponseType 其中一种,仅仅内部使用
+	ServiceResponseFlag = "_res_flag" //message flag
 
-)
-
-const (
-	ResponseTypeNone      = "0" //常规响应
-	ResponseTypeReceived  = "1" //收到推送消息
-	ResponseTypeBroadcast = "2" //收到广播消息,一次广播只调用一次，session.Data 为空(调用时不针对任何用户，仅仅处理包体)
 )

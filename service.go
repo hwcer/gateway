@@ -1,9 +1,12 @@
 package gateway
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/hwcer/cosgo/values"
+	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -49,15 +52,15 @@ func write(c *cosrpc.Context) any {
 	if len(path) == 0 {
 		return nil //仅仅设置信息，不需要发送
 	}
-	mate := c.Metadata()
-	mate[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeReceived
+	mate := values.Metadata(c.Metadata())
 	ctx := Received{socket: sock}
 	body, err := Setting.Response(&ctx, path, mate, c.Bytes())
 	if err != nil {
 		return err
 	}
-
-	sock.Send(0, path, body)
+	rid := mate.GetInt32(gwcfg.ServiceMetadataRequestId)
+	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
+	sock.Send(flag, rid, path, body)
 	return nil
 }
 
@@ -78,7 +81,7 @@ func send(c *cosrpc.Context) any {
 		}
 	}
 
-	mate := c.Metadata()
+	mate := values.Metadata(c.Metadata())
 	if _, ok := mate[gwcfg.ServicePlayerLogout]; ok {
 		players.Delete(p)
 		return nil
@@ -94,20 +97,16 @@ func send(c *cosrpc.Context) any {
 	if len(path) == 0 {
 		return nil //仅仅设置信息，不需要发送
 	}
-	mate[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeReceived
+
 	ctx := Received{socket: sock}
 	body, err := Setting.Response(&ctx, path, mate, c.Bytes())
 	if err != nil {
 		return err
 	}
-
-	var rid int32
-	if s, ok := mate[gwcfg.ServiceMetadataRequestId]; ok {
-		i, _ := strconv.Atoi(s)
-		rid = int32(i)
-	}
+	rid := mate.GetInt32(gwcfg.ServiceMetadataRequestId)
+	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	//logger.Debug("推送消息  GUID:%s RID:%d PATH:%s", guid, rid, path)
-	sock.Send(rid, path, body)
+	sock.Send(flag, rid, path, body)
 	return nil
 }
 
@@ -124,12 +123,16 @@ func broadcast(c *cosrpc.Context) any {
 			ignoreMap[v] = struct{}{}
 		}
 	}
-	mate := c.Metadata()
-	mate[gwcfg.ServiceResponseModel] = gwcfg.ResponseTypeBroadcast
+	mate := values.Metadata(c.Metadata())
+	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
+	flag.Set(message.FlagIsBroadcast)
+	mate[gwcfg.ServiceResponseFlag] = fmt.Sprintf("%d", flag)
+
 	body, err := Setting.Response(nil, path, mate, c.Bytes())
 	if err != nil {
 		return err
 	}
+	flag = message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	players.Range(func(p *session.Data) bool {
 		uid := p.GetString(gwcfg.ServiceMetadataUID)
 		if _, ok := ignoreMap[uid]; ok {
@@ -138,7 +141,7 @@ func broadcast(c *cosrpc.Context) any {
 		//CookiesUpdate(mate, p)
 		//Emitter.emit(EventTypeBroadcast, p, path, nil)
 		if sock := players.Socket(p); sock != nil {
-			sock.Send(0, path, body)
+			sock.Send(flag, 0, path, body)
 		}
 		return true
 	})

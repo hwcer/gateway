@@ -2,11 +2,13 @@ package gateway
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 	"github.com/hwcer/gateway/token"
@@ -60,7 +62,10 @@ func (this *HttpServer) init() (err error) {
 	if Setting.C2SOAuth != "" {
 		this.Server.Register(Setting.C2SOAuth, this.oauth) // 注册认证服务
 	}
-	this.Server.Register("*", this.proxy, Method...) // 注册代理服务，处理所有POST请求
+	for k, _ := range cosrpc.Service {
+		this.Server.Register(fmt.Sprintf("/%s/*", k), this.proxy, Method...) // 注册代理服务，处理所有POST请求
+	}
+
 	// 设置序列化器
 	service := this.Server.Service()
 	h := service.Handler().(*cosweb.Handler)

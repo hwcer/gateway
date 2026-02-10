@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hwcer/cosnet"
+	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/errors"
 	"github.com/hwcer/gateway/gwcfg"
@@ -50,11 +51,11 @@ var Setting = struct {
 	S2CSecret   func(sock *cosnet.Socket, secret string)                                        //登录成功时给客户端发送秘钥,空值不处理
 	S2CReplaced func(sock *cosnet.Socket, address string)                                       //被顶号时给客户端发送的顶号提示,空值不处理
 }{
-	Errorf:    defaultErrorf,
-	Router:    defaultRouter,
-	C2SOAuth:  "oauth",
-	Request:   defaultRequest,
-	Response:  defaultResponse,
+	Errorf:   defaultErrorf,
+	Router:   defaultRouter,
+	C2SOAuth: "oauth",
+	//Request:   defaultRequest,
+	//Response:  defaultResponse,
 	Serialize: defaultSerialize,
 }
 
@@ -91,9 +92,9 @@ func defaultResponse(c Context, path string, res values.Metadata, data []byte) (
 		return data, nil
 	}
 	p := ss.Data
-	rt := res.GetString(gwcfg.ServiceResponseModel)
 	rid := res.GetInt32(gwcfg.ServiceMetadataRequestId)
-	if rid == 0 && rt == gwcfg.ResponseTypeReceived {
+	flag := message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
+	if rid == 0 && !flag.Has(message.FlagIsBroadcast) && !flag.Has(message.FlagIsACK) {
 		i := p.Atomic()
 		res[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", -i)
 	}

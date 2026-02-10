@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/gwcfg"
@@ -15,7 +16,8 @@ func init() {
 	Register(&channelHandle{}, "channel", "%m")
 	channel.SendMessage = func(p *session.Data, path string, data []byte) {
 		if sock := players.Socket(p); sock != nil {
-			sock.Send(0, path, data)
+			flag := message.FlagIsBroadcast
+			sock.Send(flag, 0, path, data)
 		}
 	}
 }

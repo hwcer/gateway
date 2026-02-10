@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hwcer/cosgo/binder"
+	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 	"github.com/hwcer/gateway/token"
@@ -51,7 +52,9 @@ func (this *TcpServer) init() error {
 
 	// 注册服务
 	service := cosnet.Service()
-	_ = service.Register(this.proxy, "*")      // 注册代理服务，处理所有请求
+	for k, _ := range cosrpc.Service {
+		_ = service.Register(this.proxy, fmt.Sprintf("/%s/*", k)) // 注册代理服务，处理所有POST请求
+	}
 	_ = service.Register(this.C2SPing, "ping") // 注册心跳服务
 	if Setting.C2SOAuth != "" {
 		_ = service.Register(this.C2SOAuth, Setting.C2SOAuth) // 注册认证服务
@@ -179,7 +182,7 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	} else if Setting.S2CSecret != nil {
 		Setting.S2CSecret(sock, s)
 	} else {
-		sock.Send(0, "S2CSecret", []byte(s))
+		sock.Send(0, 0, "S2CSecret", []byte(s))
 	}
 }
 
@@ -199,7 +202,7 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if Setting.S2CReplaced != nil {
 		Setting.S2CReplaced(sock, ip)
 	} else {
-		sock.Send(0, "S2CReplaced", []byte(ip))
+		sock.Send(0, 0, "S2CReplaced", []byte(ip))
 	}
 }
 
