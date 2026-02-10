@@ -2,6 +2,11 @@ module github.com/hwcer/gateway
 
 go 1.24.0
 
+replace (
+	github.com/hwcer/cosweb v1.3.9-0.20260128070348-8144316fc80a => ../modules/cosweb
+	github.com/hwcer/coswss v0.2.3 => ../modules/coswss
+)
+
 require (
 	github.com/hwcer/cosgo v1.6.9-0.20260128070258-68b52cb6bec0
 	github.com/hwcer/cosnet v1.3.6-0.20260210070802-b6bcc16b3466

@@ -8,7 +8,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosrpc"
+	"github.com/hwcer/coswss"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 	"github.com/hwcer/gateway/token"
@@ -43,7 +45,8 @@ func NewHttpServer() *HttpServer {
 // 用于处理HTTP短连接请求
 type HttpServer struct {
 	*cosweb.Server
-	redis any //是否使用redis存储session信息
+	redis  any //是否使用redis存储session信息
+	static *cosweb.Static
 }
 
 // init 初始化HTTP服务器
@@ -73,11 +76,30 @@ func (this *HttpServer) init() (err error) {
 
 	// 静态文件服务
 	if gwcfg.Options.Gate.Static != nil && gwcfg.Options.Gate.Static.Root != "" {
-		static := this.Server.Static(gwcfg.Options.Gate.Static.Route, gwcfg.Options.Gate.Static.Root, http.MethodGet)
+		this.static = this.Server.Static(gwcfg.Options.Gate.Static.Route, gwcfg.Options.Gate.Static.Root, http.MethodGet)
 		if gwcfg.Options.Gate.Static.Index != "" {
-			static.Index(gwcfg.Options.Gate.Static.Index)
+			this.static.Index(gwcfg.Options.Gate.Static.Index)
 		}
 	}
+	return nil
+}
+
+func (this *HttpServer) wss() error {
+	if gwcfg.Options.Gate.Static != nil && gwcfg.Options.Gate.Static.Root != "" && registry.Join(gwcfg.Options.Gate.Static.Route) == registry.Join(gwcfg.Options.Gate.Websocket) {
+		this.static.Use(this.wssMiddlewareFunc)
+		return nil
+	}
+	this.Server.Register(gwcfg.Options.Gate.Websocket, func(c *cosweb.Context) any {
+		coswss.Handler(c.Response, c.Request)
+		return nil
+	})
+	return nil
+}
+func (this *HttpServer) wssMiddlewareFunc(c *cosweb.Context, next cosweb.Next) error {
+	if !coswss.IsWebSocket(c.Request) {
+		return next()
+	}
+	coswss.Handler(c.Response, c.Request)
 	return nil
 }
 
