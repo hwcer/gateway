@@ -2,18 +2,14 @@ module github.com/hwcer/gateway
 
 go 1.24.0
 
-replace (
-	github.com/hwcer/cosweb v1.3.9-0.20260128070348-8144316fc80a => ../modules/cosweb
-	github.com/hwcer/coswss v0.2.3 => ../modules/coswss
-)
-
 require (
-	github.com/hwcer/cosgo v1.6.9-0.20260128070258-68b52cb6bec0
-	github.com/hwcer/cosnet v1.3.6-0.20260210070802-b6bcc16b3466
-	github.com/hwcer/cosrpc v1.3.4-0.20260127073717-ee1bb5074c4b
-	github.com/hwcer/cosweb v1.3.9-0.20260128070348-8144316fc80a
-	github.com/hwcer/coswss v0.2.3
+	github.com/hwcer/cosgo v1.7.1
+	github.com/hwcer/cosnet v1.4.0
+	github.com/hwcer/cosrpc v1.4.0
+	github.com/hwcer/cosweb v1.4.0
+	github.com/hwcer/coswss v0.3.0
 	github.com/hwcer/logger v0.2.8
+	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 )
 
@@ -46,14 +42,13 @@ require (
 	github.com/juju/ratelimit v1.0.2 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/kavu/go_reuseport v1.5.0 // indirect
-	github.com/klauspost/compress v1.18.3 // indirect
+	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/klauspost/reedsolomon v1.13.0 // indirect
+	github.com/klauspost/reedsolomon v1.13.2 // indirect
 	github.com/libp2p/go-sockaddr v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/miekg/dns v1.1.70 // indirect
-	github.com/montanaflynn/stats v0.7.1 // indirect
+	github.com/miekg/dns v1.1.72 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -88,15 +83,14 @@ require (
 	github.com/xtaci/kcp-go v5.4.20+incompatible // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.mongodb.org/mongo-driver v1.17.7 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
-	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
-	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/exp v0.0.0-20260209203927-2842357ff358 // indirect
+	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/text v0.33.0 // indirect
-	golang.org/x/tools v0.41.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/tools v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
