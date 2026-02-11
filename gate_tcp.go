@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/gateway/gwcfg"
@@ -43,6 +44,7 @@ type TcpServer struct {
 func (this *TcpServer) init() error {
 	// 关闭 cosnet 计时器,由session接管
 	cosnet.Options.Heartbeat = 0
+	cosgo.On(cosgo.EventTypStarted, cosnet.Start)
 	session.On(session.EventHeartbeat, this.heartbeat)
 
 	// 注册事件回调
