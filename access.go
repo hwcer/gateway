@@ -57,7 +57,7 @@ func (this *access) oauth(r Proxy, req values.Metadata) (p *session.Data, err er
 	if p, err = r.Verify(); err != nil {
 		return nil, err
 	} else if p == nil {
-		return nil, errors.ErrLogin
+		return nil, session.ErrorSessionUnknown
 	}
 	return
 }

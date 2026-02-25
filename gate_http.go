@@ -70,8 +70,7 @@ func (this *HttpServer) init() (err error) {
 	}
 
 	// 设置序列化器
-	service := this.Server.Service()
-	h := service.Handler().(*cosweb.Handler)
+	h := this.Server.Handler()
 	h.SetSerialize(this.serialize)
 
 	// 静态文件服务

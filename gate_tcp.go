@@ -64,7 +64,7 @@ func (this *TcpServer) init() error {
 	_ = service.Register(this.C2SReconnect, "C2SReconnect") // 注册重连服务
 
 	// 设置序列化器
-	h := service.Handler().(*cosnet.Handler)
+	h := service.GetHandler().(*cosnet.Handler)
 	h.SetSerialize(this.serialize)
 	return nil
 }
