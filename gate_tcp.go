@@ -28,12 +28,14 @@ import (
 //   - *TcpServer: TCP服务器实例
 func NewTCPServer() *TcpServer {
 	s := &TcpServer{}
+	s.Sockets = cosnet.New()
 	return s
 }
 
 // TcpServer TCP服务器结构体
 // 用于处理TCP长连接请求
 type TcpServer struct {
+	*cosnet.Sockets
 	//Errorf func(*cosnet.Context, error) any
 }
 
@@ -44,16 +46,16 @@ type TcpServer struct {
 func (this *TcpServer) init() error {
 	// 关闭 cosnet 计时器,由session接管
 	cosnet.Options.Heartbeat = 0
-	cosgo.On(cosgo.EventTypStarted, cosnet.Start)
+	cosgo.On(cosgo.EventTypStarted, this.Sockets.Start)
 	session.On(session.EventHeartbeat, this.heartbeat)
 
 	// 注册事件回调
-	cosnet.On(cosnet.EventTypeReplaced, this.S2CReplaced)
-	cosnet.On(cosnet.EventTypeDisconnect, this.Disconnect)
-	cosnet.On(cosnet.EventTypeAuthentication, this.S2CSecret)
+	this.Sockets.On(cosnet.EventTypeReplaced, this.S2CReplaced)
+	this.Sockets.On(cosnet.EventTypeDisconnect, this.Disconnect)
+	this.Sockets.On(cosnet.EventTypeAuthentication, this.S2CSecret)
 
 	// 注册服务
-	service := cosnet.Service()
+	service := this.Sockets.Service()
 	for k, _ := range cosrpc.Service {
 		_ = service.Register(this.proxy, fmt.Sprintf("/%s/*", k)) // 注册代理服务，处理所有POST请求
 	}
@@ -64,7 +66,7 @@ func (this *TcpServer) init() error {
 	_ = service.Register(this.C2SReconnect, "C2SReconnect") // 注册重连服务
 
 	// 设置序列化器
-	h := service.GetHandler().(*cosnet.Handler)
+	h := this.Sockets.Handler()
 	h.SetSerialize(this.serialize)
 	return nil
 }
@@ -89,7 +91,7 @@ func (this *TcpServer) serialize(c *cosnet.Context, reply any) ([]byte, error) {
 // 返回值:
 //   - error: 监听过程中的错误
 func (this *TcpServer) Listen(address string) error {
-	_, err := cosnet.Listen(address)
+	_, err := this.Sockets.Listen(address)
 	if err == nil {
 		logger.Trace("网关长连接启动：%v", gwcfg.Options.Gate.Address)
 	}
@@ -111,7 +113,7 @@ func (this *TcpServer) heartbeat(i any) {
 // 返回值:
 //   - error: 接受连接过程中的错误
 func (this *TcpServer) Accept(ln net.Listener) error {
-	cosnet.Accept(&tcp.Listener{Listener: ln})
+	this.Sockets.Accept(&tcp.Listener{Listener: ln})
 	logger.Trace("网关长连接启动：%v", gwcfg.Options.Gate.Address)
 	return nil
 }
