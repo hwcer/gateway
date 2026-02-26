@@ -124,7 +124,7 @@ func (this *Module) Start() (err error) {
 			err = HTTP.wss() //在COSWEB上启动WS
 		} else {
 			// 使用coswss.New创建WebSocket服务器
-			err = coswss.New(gwcfg.Options.Gate.Address, gwcfg.Options.Gate.Websocket)
+			err = coswss.New(TCP.Sockets, gwcfg.Options.Gate.Address, gwcfg.Options.Gate.Websocket)
 		}
 		if err != nil {
 			return err
@@ -137,7 +137,6 @@ func (this *Module) Start() (err error) {
 			err = nil
 		}
 	}
-
 	return err
 }
 

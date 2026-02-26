@@ -90,7 +90,7 @@ func (this *HttpServer) wss() error {
 		return nil
 	}
 	this.Server.Register(gwcfg.Options.Gate.Websocket, func(c *cosweb.Context) any {
-		coswss.Handler(c.Response, c.Request)
+		coswss.Handler(TCP.Sockets, c.Response, c.Request)
 		return nil
 	})
 	return nil
@@ -99,7 +99,7 @@ func (this *HttpServer) wssMiddlewareFunc(c *cosweb.Context, next cosweb.Next) e
 	if !coswss.IsWebSocket(c.Request) {
 		return next()
 	}
-	coswss.Handler(c.Response, c.Request)
+	coswss.Handler(TCP.Sockets, c.Response, c.Request)
 	return nil
 }
 

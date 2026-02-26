@@ -56,7 +56,7 @@ func (this *TcpServer) init() error {
 	// 注册服务
 	service := this.Sockets.Service()
 	for k, _ := range cosrpc.Service {
-		_ = service.Register(this.proxy, fmt.Sprintf("/%s/*", k)) // 注册代理服务，处理所有POST请求
+		_ = service.Register(this.proxy, fmt.Sprintf("/%s/*", k)) // 注册代理服务，处理所有请求
 	}
 	_ = service.Register(this.C2SPing, "ping") // 注册心跳服务
 	if Setting.C2SOAuth != "" {
@@ -67,7 +67,8 @@ func (this *TcpServer) init() error {
 	// 设置序列化器
 	h := this.Sockets.Handler()
 	h.SetSerialize(this.serialize)
-	return nil
+
+	return this.Sockets.Start()
 }
 
 // serialize 序列化函数

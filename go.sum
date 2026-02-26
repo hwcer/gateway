@@ -142,16 +142,14 @@ github.com/hashicorp/serf v0.9.5/go.mod h1:UWDWwZeL5cuWDJdl0C6wrvrUwEqtQ4ZKBKKEN
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/hwcer/cosgo v1.7.2-0.20260225025403-cac7fe02996e h1:w00xWgPONF1tS+t366ab1/79JR8Znzifbfe41vRYHoU=
 github.com/hwcer/cosgo v1.7.2-0.20260225025403-cac7fe02996e/go.mod h1:UK0P445RT0JPtgy1UDt8VGDU4zYE/yS6a6nlTA2vcWA=
-github.com/hwcer/cosnet v1.4.1-0.20260225100447-be1884b82d16 h1:unwex7EndsYLRHJhpeRth2x2DPPnCQeP/y/BgtBibGc=
-github.com/hwcer/cosnet v1.4.1-0.20260225100447-be1884b82d16/go.mod h1:2S8p7YzGGWpLOGD8Kl3pwK7RNxXPd5fltVVcAMPBK2k=
 github.com/hwcer/cosnet v1.4.1-0.20260226060222-e14393a0a540 h1:GTRsOeb8OocD3DKtMLDZXsRloc/Oz1w3aYC9Cz1OYGc=
 github.com/hwcer/cosnet v1.4.1-0.20260226060222-e14393a0a540/go.mod h1:2S8p7YzGGWpLOGD8Kl3pwK7RNxXPd5fltVVcAMPBK2k=
 github.com/hwcer/cosrpc v1.4.0 h1:uFFXuqxQYoUtLzAXF5ORIBu6CvN8mZFJuu+r8v2oqBo=
 github.com/hwcer/cosrpc v1.4.0/go.mod h1:tIU7Qt+rDfdVaetuIkgJBrRfgG+E5TJzNqv4IVbcejQ=
 github.com/hwcer/cosweb v1.4.1-0.20260225143149-e4fc31891080 h1:bVDvIvQTybumZjb+zJ06wQk0DNiyOFrEFk21OiW5u+c=
 github.com/hwcer/cosweb v1.4.1-0.20260225143149-e4fc31891080/go.mod h1:xcC+eaQr787nk7gTQ8DSnFbw6jM8Py2dw7dNSkyNgI0=
-github.com/hwcer/coswss v0.3.1-0.20260225144939-cd9707de57f3 h1:4K/KvcJaRkn+rHYvTjBMcM0RnK1D78p92FFbxtQw6H0=
-github.com/hwcer/coswss v0.3.1-0.20260225144939-cd9707de57f3/go.mod h1:tUlMGzvtJR/Fl1w+ie/FMgdzLeru0SCb4P2gHF+5h00=
+github.com/hwcer/coswss v0.3.1-0.20260226080732-2f8cb7dcc0fb h1:wpZaZ2XDToP57oCcnirzjEDaolRy9qN7H7uIEOhKcRI=
+github.com/hwcer/coswss v0.3.1-0.20260226080732-2f8cb7dcc0fb/go.mod h1:tUlMGzvtJR/Fl1w+ie/FMgdzLeru0SCb4P2gHF+5h00=
 github.com/hwcer/logger v0.2.8 h1:TjXr/MDNuMcM+kGADa0MnviY1fs9lSwb62cQOEeros8=
 github.com/hwcer/logger v0.2.8/go.mod h1:NGF7QlsEFiTKJv0NO0XAJ4jlT7I8OdAGiT2SY2+Y6E4=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
@@ -390,8 +388,6 @@ golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb/go.mod h1:sp8m0HH+o8qH0wwXwY
 golang.org/x/net v0.0.0-20210226172049-e18ecbb05110/go.mod h1:m0MpNAwzfU5UDzcl9v0D8zg8gWTRqZa9RBIspLL5mdg=
 golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4/go.mod h1:RBQZq4jEuRlivfhVLdyRGr576XBO4/greRjx4P4O3yc=
 golang.org/x/net v0.0.0-20220722155237-a158d28d115b/go.mod h1:XRhObCWvk6IyKnWLug+ECip1KBveYUHfp+8e9klMJ9c=
-golang.org/x/net v0.50.0 h1:ucWh9eiCGyDR3vtzso0WMQinm2Dnt8cFMuQa9K33J60=
-golang.org/x/net v0.50.0/go.mod h1:UgoSli3F/pBgdJBHCTc+tp3gmrU4XswgGRgtnwWTfyM=
 golang.org/x/net v0.51.0 h1:94R/GTO7mt3/4wIKpcR5gkGmRLOuE/2hNGeWq/GBIFo=
 golang.org/x/net v0.51.0/go.mod h1:aamm+2QF5ogm02fjy5Bb7CQ0WMt1/WVM7FtyaTLlA9Y=
 golang.org/x/oauth2 v0.0.0-20180821212333-d2e6202438be/go.mod h1:N/0e6XlmueqKjAGxoOufVs8QHGRruUQn6yWY3a++T0U=
