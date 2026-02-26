@@ -2,14 +2,11 @@ package gateway
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/hwcer/cosnet"
-	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/errors"
-	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
 	"github.com/hwcer/cosgo"
@@ -41,21 +38,19 @@ type Accept interface {
 }
 
 var Setting = struct {
-	Errorf      func(err error) []byte                                                          //格式化输出网关错误
-	Router      router                                                                          //路由处理规则
-	C2SOAuth    string                                                                          //网关登录,置空时不启用默认验证方式
-	G2SOAuth    string                                                                          //游戏服登录验证,网关登录登录成功后继续使用GUID去游戏服验证,留空不进行验证
-	Request     func(c Context, path string, req values.Metadata, args []byte) ([]byte, error)  //网关转发消息时,如果数据有加密，可以在解密之后转发
-	Response    func(c Context, path string, res values.Metadata, reply []byte) ([]byte, error) //rpc 返回数据时,推送消息时只有Session,广播时 Context为NIL
-	Serialize   func(accept Accept, reply any) ([]byte, error)                                  //序列化方式
-	S2CSecret   func(sock *cosnet.Socket, secret string)                                        //登录成功时给客户端发送秘钥,空值不处理
-	S2CReplaced func(sock *cosnet.Socket, address string)                                       //被顶号时给客户端发送的顶号提示,空值不处理
+	Errorf      func(err error) []byte                         //格式化输出网关错误
+	Router      router                                         //路由处理规则
+	C2SOAuth    string                                         //网关登录,置空时不启用默认验证方式
+	G2SOAuth    string                                         //游戏服登录验证,网关登录登录成功后继续使用GUID去游戏服验证,留空不进行验证
+	Request     func(c *Context, args []byte) ([]byte, error)  //网关转发消息时,如果数据有加密，可以在解密之后转发
+	Response    func(c *Context, reply []byte) ([]byte, error) //rpc 返回数据时,推送消息时只有Session,广播时 Context为NIL
+	Serialize   func(accept Accept, reply any) ([]byte, error) //序列化方式
+	S2CSecret   func(sock *cosnet.Socket, secret string)       //登录成功时给客户端发送秘钥,空值不处理
+	S2CReplaced func(sock *cosnet.Socket, address string)      //被顶号时给客户端发送的顶号提示,空值不处理
 }{
 	Errorf:    defaultErrorf,
 	Router:    defaultRouter,
 	C2SOAuth:  "oauth",
-	Request:   defaultRequest,
-	Response:  defaultResponse,
 	Serialize: defaultSerialize,
 }
 
@@ -77,28 +72,6 @@ var defaultRouter router = func(path string, req values.Metadata) (servicePath, 
 	servicePath = registry.Formatter(path[0:i])
 	serviceMethod = registry.Formatter(path[i:])
 	return
-}
-
-func defaultRequest(c Context, path string, req values.Metadata, args []byte) ([]byte, error) {
-	return args, nil
-}
-
-func defaultResponse(c Context, path string, res values.Metadata, data []byte) ([]byte, error) {
-	if c == nil {
-		return data, nil
-	}
-	ss := c.Session()
-	if ss == nil || ss.Data == nil {
-		return data, nil
-	}
-	p := ss.Data
-	rid := res.GetInt32(gwcfg.ServiceMetadataRequestId)
-	flag := message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
-	if rid == 0 && !flag.Has(message.FlagIsBroadcast) && !flag.Has(message.FlagIsACK) {
-		i := p.Atomic()
-		res[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", -i)
-	}
-	return data, nil
 }
 
 func defaultSerialize(accept Accept, reply any) ([]byte, error) {

@@ -30,7 +30,7 @@ var ElapsedMillisecond = 500 * time.Millisecond
 // 返回值:
 //   - reply: 服务返回的数据
 //   - err: 处理过程中的错误
-func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
+func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	// 异常捕获和错误处理
 	defer func() {
 		if e := recover(); e != nil {
@@ -43,7 +43,7 @@ func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
 	}()
 
 	// 获取请求元数据和创建响应元数据
-	req := ctx.Metadata()
+	req := proxy.Metadata()
 	res := make(values.Metadata)
 
 	// 获取请求路径
@@ -63,7 +63,7 @@ func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
 	}
 
 	// 权限验证：验证用户是否有权限访问该服务和方法
-	if p, err = Access.Verify(ctx, req, servicePath, serviceMethod); err != nil {
+	if p, err = Access.Verify(proxy, req, servicePath, serviceMethod); err != nil {
 		return nil, err
 	}
 
@@ -78,16 +78,19 @@ func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
 
 	// 获取请求体
 	var buff *bytes.Buffer
-	if buff, err = ctx.Buffer(); err != nil {
+	if buff, err = proxy.Buffer(); err != nil {
 		return nil, err
 	}
 
 	// 处理请求：可以在这里对请求进行预处理
-	body, err := Setting.Request(ctx, path, req, buff.Bytes())
-	if err != nil {
-		return nil, err
+	body := buff.Bytes()
+	if Setting.Request != nil {
+		flag := proxy.Flag()
+		ctx := NewContextWithProxy(&path, &flag, req, proxy)
+		if body, err = Setting.Request(ctx, body); err != nil {
+			return nil, err
+		}
 	}
-
 	// 性能监控：记录高延时请求
 	startTime := time.Now()
 	defer func() {
@@ -107,12 +110,6 @@ func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
 		return nil, err
 	}
 
-	// 处理响应
-
-	flag := message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
-	flag.Set(message.FlagIsACK)
-	res[gwcfg.ServiceResponseFlag] = fmt.Sprintf("%d", flag)
-
 	// 如果响应元数据只有响应类型，则直接返回
 	if len(res) == 1 {
 		return reply, nil
@@ -122,17 +119,15 @@ func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
 	// 创建登录信息：如果响应中包含登录标志，则执行登录操作
 	if guid, ok := res[gwcfg.ServicePlayerLogin]; ok {
 		var token string
-		if token, err = ctx.Login(guid, gwcfg.Cookies.Filter(res)); err != nil {
+		if token, err = proxy.Login(guid, gwcfg.Cookies.Filter(res)); err != nil {
 			return nil, err
 		}
-		if ss := ctx.Session(); ss != nil {
-			p = ss.Data
-		}
+		p = proxy.Session()
 		res[gwcfg.ServicePlayerCookie] = token
 	}
 	// 退出登录：如果响应中包含退出登录标志，则执行退出登录操作
 	if _, ok := res[gwcfg.ServicePlayerLogout]; ok {
-		if err = ctx.Logout(); err != nil {
+		if err = proxy.Logout(); err != nil {
 			return nil, err
 		} else if p != nil {
 			players.Delete(p)
@@ -145,9 +140,14 @@ func proxyRequest(ctx Proxy, path string) (reply []byte, err error) {
 		CookiesUpdate(res, p)
 	}
 	// 可以在这里对响应进行后处理
-	reply, err = Setting.Response(ctx, path, res, reply)
-	if err != nil {
-		return nil, err
+	if Setting.Response != nil {
+		var flag = message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
+		flag.Set(message.FlagConfirm)
+		ctx := NewContextWithProxy(&path, &flag, res, proxy)
+		reply, err = Setting.Response(ctx, reply)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return reply, nil
 }

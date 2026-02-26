@@ -16,8 +16,8 @@ func init() {
 	Register(&channelHandle{}, "channel", "%m")
 	channel.SendMessage = func(p *session.Data, path string, data []byte) {
 		if sock := players.Socket(p); sock != nil {
-			flag := message.FlagIsBroadcast
-			sock.Send(flag, 0, path, data)
+			flag := message.FlagBroadcast
+			_ = sock.Send(flag, 0, path, data)
 		}
 	}
 }

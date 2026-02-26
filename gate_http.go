@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/hwcer/cosgo/registry"
+	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/coswss"
 	"github.com/hwcer/gateway/gwcfg"
@@ -212,9 +213,7 @@ func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 // 实现gwcfg.Context接口，用于HTTP请求的代理
 type HttpContent struct {
 	*cosweb.Context
-	uri *url.URL
-	//data *session.Data
-	//cookie   *http.Cookie
+	uri      *url.URL
 	metadata values.Metadata
 }
 
@@ -308,9 +307,9 @@ func (this *HttpContent) Header() map[string]string {
 	}
 	return r
 }
-func (this *HttpContent) Session() *session.Session {
-	if ss := this.Context.Session; ss != nil && ss.Data != nil {
-		return ss
+func (this *HttpContent) Session() *session.Data {
+	if ss := this.Context.Session; ss != nil {
+		return ss.Data
 	}
 	return nil
 }
@@ -340,6 +339,9 @@ func (this *HttpContent) RemoteAddr() string {
 		ip = ip[0:i]
 	}
 	return ip
+}
+func (this *HttpContent) Flag() message.Flag {
+	return 0
 }
 
 // getContentType 获取内容类型

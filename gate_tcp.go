@@ -11,6 +11,7 @@ import (
 
 	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/binder"
+	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
@@ -44,8 +45,6 @@ type TcpServer struct {
 // 返回值:
 //   - error: 初始化过程中的错误
 func (this *TcpServer) init() error {
-	// 关闭 cosnet 计时器,由session接管
-	cosnet.Options.Heartbeat = 0
 	cosgo.On(cosgo.EventTypStarted, this.Sockets.Start)
 	session.On(session.EventHeartbeat, this.heartbeat)
 
@@ -53,7 +52,7 @@ func (this *TcpServer) init() error {
 	this.Sockets.On(cosnet.EventTypeReplaced, this.S2CReplaced)
 	this.Sockets.On(cosnet.EventTypeDisconnect, this.Disconnect)
 	this.Sockets.On(cosnet.EventTypeAuthentication, this.S2CSecret)
-
+	this.Sockets.Options.Heartbeat = 0 //关闭计时器,由session接管
 	// 注册服务
 	service := this.Sockets.Service()
 	for k, _ := range cosrpc.Service {
@@ -103,7 +102,7 @@ func (this *TcpServer) heartbeat(i any) {
 	if s <= 0 {
 		return
 	}
-	cosnet.Heartbeat(s)
+	this.Sockets.Heartbeat(s)
 }
 
 // Accept 接受TCP连接
@@ -186,7 +185,7 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	} else if Setting.S2CSecret != nil {
 		Setting.S2CSecret(sock, s)
 	} else {
-		sock.Send(0, 0, "S2CSecret", []byte(s))
+		_ = sock.Send(0, 0, "S2CSecret", []byte(s))
 	}
 }
 
@@ -206,7 +205,7 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if Setting.S2CReplaced != nil {
 		Setting.S2CReplaced(sock, ip)
 	} else {
-		sock.Send(0, 0, "S2CReplaced", []byte(ip))
+		_ = sock.Send(0, 0, "S2CReplaced", []byte(ip))
 	}
 }
 
@@ -302,11 +301,11 @@ func (this *SocketContext) Logout() error {
 	this.Context.Socket.Close()
 	return nil
 }
-func (this *SocketContext) Session() *session.Session {
-	if p := this.Context.Socket.Data(); p != nil {
-		return session.New(p)
-	}
-	return nil
+func (this *SocketContext) Flag() message.Flag {
+	return this.Context.Message.Flag()
+}
+func (this *SocketContext) Session() *session.Data {
+	return this.Context.Socket.Data()
 }
 
 // Socket 获取socket
