@@ -24,7 +24,7 @@ type Proxy interface {
 
 }
 
-func NewContextWithSocket(path *string, flag *message.Flag, meta values.Metadata, socket *cosnet.Socket) *Context {
+func NewContextWithSocket(path string, flag *message.Flag, meta values.Metadata, socket *cosnet.Socket) *Context {
 	r := Context{path: path, flag: flag, meta: meta}
 	if socket != nil {
 		r.data = socket.Data()
@@ -32,7 +32,7 @@ func NewContextWithSocket(path *string, flag *message.Flag, meta values.Metadata
 	}
 	return &r
 }
-func NewContextWithProxy(path *string, flag *message.Flag, meta values.Metadata, ctx Proxy) *Context {
+func NewContextWithProxy(path string, flag *message.Flag, meta values.Metadata, ctx Proxy) *Context {
 	r := Context{path: path, flag: flag, meta: meta}
 	r.data = ctx.Session()
 	r.address = ctx.RemoteAddr()
@@ -41,7 +41,7 @@ func NewContextWithProxy(path *string, flag *message.Flag, meta values.Metadata,
 
 // Context 收到消息时使用的
 type Context struct {
-	path    *string
+	path    string
 	flag    *message.Flag
 	meta    values.Metadata
 	data    *session.Data
@@ -49,7 +49,7 @@ type Context struct {
 }
 
 // Path 使用指针，必要时可以修改
-func (this *Context) Path() *string {
+func (this *Context) Path() string {
 	return this.path
 }
 

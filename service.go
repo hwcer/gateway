@@ -55,7 +55,7 @@ func write(c *cosrpc.Context) any {
 	var flag = message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	body := c.Bytes()
 	if Setting.Response != nil {
-		ctx := NewContextWithSocket(&path, &flag, mate, sock)
+		ctx := NewContextWithSocket(path, &flag, mate, sock)
 		body, err = Setting.Response(ctx, body)
 	}
 
@@ -105,7 +105,7 @@ func send(c *cosrpc.Context) any {
 	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	body := c.Bytes()
 	if Setting.Response != nil {
-		ctx := NewContextWithSocket(&path, &flag, mate, sock)
+		ctx := NewContextWithSocket(path, &flag, mate, sock)
 		body, err = Setting.Response(ctx, body)
 	}
 	if err != nil {
@@ -137,7 +137,7 @@ func broadcast(c *cosrpc.Context) any {
 	var err error
 	body := c.Bytes()
 	if Setting.Response != nil {
-		ctx := NewContextWithSocket(&path, &flag, mate, nil)
+		ctx := NewContextWithSocket(path, &flag, mate, nil)
 		body, err = Setting.Response(ctx, body)
 	}
 	if err != nil {

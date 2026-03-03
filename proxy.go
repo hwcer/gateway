@@ -86,7 +86,7 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	body := buff.Bytes()
 	if Setting.Request != nil {
 		flag := proxy.Flag()
-		ctx := NewContextWithProxy(&path, &flag, req, proxy)
+		ctx := NewContextWithProxy(path, &flag, req, proxy)
 		if body, err = Setting.Request(ctx, body); err != nil {
 			return nil, err
 		}
@@ -143,7 +143,7 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	if Setting.Response != nil {
 		var flag = message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
 		flag.Set(message.FlagConfirm)
-		ctx := NewContextWithProxy(&path, &flag, res, proxy)
+		ctx := NewContextWithProxy(path, &flag, res, proxy)
 		reply, err = Setting.Response(ctx, reply)
 		if err != nil {
 			return nil, err
