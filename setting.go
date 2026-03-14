@@ -38,20 +38,24 @@ type Accept interface {
 }
 
 var Setting = struct {
-	Errorf      func(err error) []byte                         //格式化输出网关错误
-	Router      router                                         //路由处理规则
-	C2SOAuth    string                                         //网关登录,置空时不启用默认验证方式
-	G2SOAuth    string                                         //游戏服登录验证,网关登录登录成功后继续使用GUID去游戏服验证,留空不进行验证
-	Request     func(c *Context, args []byte) ([]byte, error)  //网关转发消息时,如果数据有加密，可以在解密之后转发
-	Response    func(c *Context, reply []byte) ([]byte, error) //rpc 返回数据时,推送消息时只有Session,广播时 Context为NIL
-	Serialize   func(accept Accept, reply any) ([]byte, error) //序列化方式
-	S2CSecret   func(sock *cosnet.Socket, secret string)       //登录成功时给客户端发送秘钥,空值不处理
-	S2CReplaced func(sock *cosnet.Socket, address string)      //被顶号时给客户端发送的顶号提示,空值不处理
+	Errorf       func(err error) []byte                         //格式化输出网关错误
+	Router       router                                         //路由处理规则
+	C2SOAuth     string                                         //网关登录,置空时不启用默认验证方式
+	G2SOAuth     string                                         //游戏服登录验证,网关登录登录成功后继续使用GUID去游戏服验证,留空不进行验证
+	Request      func(c *Context, args []byte) ([]byte, error)  //网关转发消息时,如果数据有加密，可以在解密之后转发
+	Response     func(c *Context, reply []byte) ([]byte, error) //rpc 返回数据时,推送消息时只有Session,广播时 Context为NIL
+	Serialize    func(accept Accept, reply any) ([]byte, error) //序列化方式
+	S2CSecret    func(sock *cosnet.Socket, secret string)       //登录成功时给客户端发送秘钥,空值不处理
+	S2CReplaced  func(sock *cosnet.Socket, address string)      //被顶号时给客户端发送的顶号提示,空值不处理
+	C2SHeartbeat string                                         //客户端心跳包名
+	C2SReconnect string                                         //客户端断线重连包名
 }{
-	Errorf:    defaultErrorf,
-	Router:    defaultRouter,
-	C2SOAuth:  "oauth",
-	Serialize: defaultSerialize,
+	Errorf:       defaultErrorf,
+	Router:       defaultRouter,
+	C2SOAuth:     "oauth",
+	Serialize:    defaultSerialize,
+	C2SHeartbeat: "C2SHeartbeat",
+	C2SReconnect: "C2SReconnect",
 }
 
 type router func(path string, req values.Metadata) (servicePath, serviceMethod string, err error)

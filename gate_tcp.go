@@ -58,11 +58,12 @@ func (this *TcpServer) init() error {
 	for k, _ := range cosrpc.Service {
 		_ = service.Register(this.proxy, fmt.Sprintf("/%s/*", k)) // 注册代理服务，处理所有请求
 	}
-	_ = service.Register(this.C2SPing, "ping") // 注册心跳服务
+
 	if Setting.C2SOAuth != "" {
 		_ = service.Register(this.C2SOAuth, Setting.C2SOAuth) // 注册认证服务
 	}
-	_ = service.Register(this.C2SReconnect, "C2SReconnect") // 注册重连服务
+	_ = service.Register(this.C2SHeartbeat, Setting.C2SHeartbeat) // 注册心跳服务
+	_ = service.Register(this.C2SReconnect, Setting.C2SReconnect) // 注册重连服务
 
 	// 设置序列化器
 	h := this.Sockets.Handler()
@@ -118,13 +119,13 @@ func (this *TcpServer) Accept(ln net.Listener) error {
 	return nil
 }
 
-// C2SPing 处理心跳请求
+// C2SHeartbeat 处理心跳请求
 // 参数:
 //   - c: cosnet上下文
 //
 // 返回值:
 //   - any: 当前时间戳（毫秒）
-func (this *TcpServer) C2SPing(c *cosnet.Context) any {
+func (this *TcpServer) C2SHeartbeat(c *cosnet.Context) any {
 	ms := time.Now().UnixMilli()
 	s := strconv.Itoa(int(ms))
 	return []byte(s)
