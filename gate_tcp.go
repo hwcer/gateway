@@ -187,7 +187,7 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	} else if Setting.S2CSecret != nil {
 		Setting.S2CSecret(sock, s)
 	} else {
-		_ = sock.Send(0, 0, "S2CSecret", []byte(s))
+		_ = sock.SendWithMagic(message.MagicNumberPathBytes, 0, 0, "S2CSecret", []byte(s))
 	}
 }
 
@@ -207,7 +207,7 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if Setting.S2CReplaced != nil {
 		Setting.S2CReplaced(sock, ip)
 	} else {
-		_ = sock.Send(0, 0, "S2CReplaced", []byte(ip))
+		_ = sock.SendWithMagic(message.MagicNumberPathBytes, 0, 0, "S2CReplaced", []byte(ip))
 	}
 }
 
