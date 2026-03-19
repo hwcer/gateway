@@ -132,6 +132,7 @@ func broadcast(c *cosrpc.Context) any {
 	}
 	mate := values.Metadata(c.Metadata())
 	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
+	flag.Set(message.FlagNoreply)
 	flag.Set(message.FlagBroadcast)
 
 	var err error

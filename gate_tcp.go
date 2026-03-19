@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -127,8 +126,7 @@ func (this *TcpServer) Accept(ln net.Listener) error {
 //   - any: 当前时间戳（毫秒）
 func (this *TcpServer) C2SHeartbeat(c *cosnet.Context) any {
 	ms := time.Now().UnixMilli()
-	s := strconv.Itoa(int(ms))
-	return []byte(s)
+	return ms
 }
 
 // C2SOAuth 处理认证请求
@@ -182,12 +180,20 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 		return
 	}
 	ss := session.New(data)
-	if s, err := ss.Token(); err != nil {
+	ts, err := ss.Token()
+	if err != nil {
 		sock.Errorf(err)
-	} else if Setting.S2CSecret != nil {
-		Setting.S2CSecret(sock, s)
+		return
+	}
+	if Setting.S2CSecret == nil {
+		return //不需要秘钥
+	}
+	if S2CSecretHandle, ok := Setting.S2CSecret.(S2CSecret); ok {
+		S2CSecretHandle.S2CSecret(sock, ts)
+	} else if S2CSecretString, ok := Setting.S2CSecret.(string); ok {
+		_ = sock.SendWithMagic(message.MagicNumberPathBytes, message.FlagNoreply, 0, S2CSecretString, ts)
 	} else {
-		_ = sock.SendWithMagic(message.MagicNumberPathBytes, 0, 0, "S2CSecret", []byte(s))
+		logger.Alert("gateway Setting.S2CSecret not support")
 	}
 }
 
@@ -195,7 +201,7 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 // 默认的顶号提示
 // 参数:
 //   - sock: cosnet socket
-//   - i: 事件数据，包含顶号IP
+//   - i: 事件数据，包含顶号 IP
 func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if sock == nil {
 		return
@@ -204,10 +210,16 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if !ok {
 		return
 	}
-	if Setting.S2CReplaced != nil {
-		Setting.S2CReplaced(sock, ip)
+
+	if Setting.S2CReplaced == nil {
+		return //不需要通知
+	}
+	if S2CReplacedHandle, ok := Setting.S2CReplaced.(S2CReplaced); ok {
+		S2CReplacedHandle.S2CReplaced(sock, ip)
+	} else if S2CReplacedString, ok := Setting.S2CReplaced.(string); ok {
+		_ = sock.SendWithMagic(message.MagicNumberPathBytes, message.FlagNoreply, 0, S2CReplacedString, ip)
 	} else {
-		_ = sock.SendWithMagic(message.MagicNumberPathBytes, 0, 0, "S2CReplaced", []byte(ip))
+		logger.Alert("gateway Setting.S2CReplaced not support")
 	}
 }
 
