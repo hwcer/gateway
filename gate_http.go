@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosnet/message"
@@ -62,10 +63,7 @@ func (this *HttpServer) init() (err error) {
 	allow.Methods(Method...)
 	allow.Headers(strings.Join(Headers, ","))
 	this.Server.Use(allow.Handle)
-	// 注册服务
-	if Setting.C2SOAuth != "" {
-		this.Server.Register(Setting.C2SOAuth, this.oauth) // 注册认证服务
-	}
+
 	for k, _ := range cosrpc.Service {
 		this.Server.Register(fmt.Sprintf("/%s/*", k), this.proxy, Method...) // 注册代理服务，处理所有POST请求
 	}
@@ -73,6 +71,11 @@ func (this *HttpServer) init() (err error) {
 	// 设置序列化器
 	h := this.Server.Handler()
 	h.SetSerialize(this.serialize)
+	// 注册服务
+	if Setting.C2SOAuth != "" {
+		this.Server.Register(Setting.C2SOAuth, this.oauth, Method...) // 注册认证服务
+	}
+	this.Server.Register(Setting.C2SHeartbeat, this.C2SHeartbeat, Method...) // 注册心跳服务
 
 	// 静态文件服务
 	if gwcfg.Options.Gate.Static != nil && gwcfg.Options.Gate.Static.Root != "" {
@@ -191,6 +194,9 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 		return err
 	}
 	return reply
+}
+func (this *HttpServer) C2SHeartbeat(c *cosweb.Context) any {
+	return time.Now().UnixMilli()
 }
 
 // proxy 处理HTTP请求代理
