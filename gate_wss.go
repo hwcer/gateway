@@ -3,43 +3,45 @@ package gateway
 import (
 	"net/http"
 
+	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosnet"
 	"github.com/hwcer/coswss"
+	"github.com/hwcer/gateway/errors"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 	"github.com/hwcer/logger"
 )
 
 func init() {
-	//coswss.Options.Verify = WSVerify
+	coswss.Options.Verify = WSVerify
 	coswss.Options.Accept = WSAccept
 }
 
-func WSVerify(w http.ResponseWriter, r *http.Request) (meta map[string]string, err error) {
-	//logger.Trace("Sec-Websocket-Extensions:%v", r.Head.Get("Sec-Websocket-Extensions"))
-	//logger.Trace("Sec-Websocket-Key:%v", r.Head.Get("Sec-Websocket-Key"))
-	//logger.Trace("Sec-Websocket-Protocol:%v", r.Head.Get("Sec-Websocket-Protocol"))
-	//logger.Trace("Sec-Websocket-Branch:%v", r.Head.Get("Sec-Websocket-Branch"))
-	//token := r.Header.Get("Sec-Websocket-Protocol")
-	//if token == "" || len(token) < 2 {
-	//	//return nil, values.Error("token empty")
-	//	return nil, nil
-	//}
-	//req := values.Metadata{}
-	//res := values.Metadata{}
-	//reply := make([]byte, 0)
-
-	//err = request(nil, options.Gate.Login, []byte{}, req, res, &reply)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	//sess := session.New()
-	//if err = sess.G2SOAuth(token); err != nil {
-	//	return "", values.Parse(err)
-	//}
-	//uuid = res[options.ServiceMetadataGUID]
-	return nil, nil
+// WSVerify WebSocket 握手前验证
+// 维护模式下拒绝非开发者连接；有 session 凭证时自动登录，无凭证允许连接后续通过 C2SOAuth 认证
+func WSVerify(_ http.ResponseWriter, r *http.Request) (meta map[string]string, err error) {
+	if gwcfg.Options.Maintenance {
+		secret := r.URL.Query().Get("secret")
+		if secret == "" || secret != gwcfg.Options.Developer {
+			return nil, errors.ErrServerMaintenance
+		}
+	}
+	// 从 query 或 cookie 获取 session token，支持握手时自动登录
+	token := r.URL.Query().Get(session.Options.Name)
+	if token == "" {
+		if c, e := r.Cookie(session.Options.Name); e == nil {
+			token = c.Value
+		}
+	}
+	if token == "" {
+		return nil, nil
+	}
+	ss := session.New()
+	if err = ss.Verify(token); err != nil {
+		return nil, err
+	}
+	meta = map[string]string{gwcfg.ServiceMetadataGUID: ss.Data.UUID()}
+	return meta, nil
 }
 func WSAccept(sock *cosnet.Socket, meta map[string]string) {
 	if len(meta) == 0 {

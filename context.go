@@ -63,14 +63,6 @@ func (this *Context) Header() map[string]string {
 }
 func (this *Context) Session() *session.Data {
 	return this.data
-	//if this.socket == nil {
-	//	return nil
-	//}
-	//data := this.socket.Data()
-	//if data == nil {
-	//	return nil
-	//}
-	//return session.New(data)
 }
 func (this *Context) Metadata() values.Metadata {
 	return this.meta

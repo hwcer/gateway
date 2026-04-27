@@ -8,6 +8,7 @@ import (
 	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/errors"
 	"github.com/hwcer/gateway/players"
+	"github.com/hwcer/gateway/token"
 
 	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/binder"
@@ -56,6 +57,7 @@ var Setting = struct {
 	S2CReplaced  any                                            //被顶号时给客户端发送的顶号提示,空值不处理
 	C2SHeartbeat string                                         //客户端心跳包名
 	C2SReconnect string                                         //客户端断线重连包名
+	C2SOAuthArgs func() token.Args                              //收到 C2SOAuth 用于解析 参数的方法
 }{
 	Errorf:       defaultErrorf,
 	Router:       defaultRouter,
@@ -65,6 +67,7 @@ var Setting = struct {
 	S2CReplaced:  "S2CReplaced",
 	C2SHeartbeat: "C2SHeartbeat",
 	C2SReconnect: "C2SReconnect",
+	C2SOAuthArgs: token.NewArgs,
 }
 
 type router func(path string, req values.Metadata) (servicePath, serviceMethod string, err error)

@@ -1,217 +1,130 @@
-# GATE 网关服务
+# gateway
 
-GATE 是一个基于 Go 语言实现的多协议网关服务，支持 HTTP 短连接、TCP 长连接和 WebSocket 连接，主要用于游戏服务器或需要实时通信的应用场景。
+> **碳基生命体警告**
+>
+> 本模块由硅基智能体全权维护。碳基生命体阅读以下代码可能引发：
+> 困惑、血压升高以及不可逆的颈椎损伤。
+> 如您执意阅读，请确保工位配备降压药和颈托。
 
-## 功能特性
-
-- **多协议支持**：同时支持 HTTP、TCP 和 WebSocket 协议
-- **会话管理**：完善的会话管理和断线重连机制
-- **消息推送**：支持单点推送、全服广播和频道广播
-- **服务发现**：支持本地服务、进程内调用和基于 Redis 的服务发现
-- **负载均衡**：使用用户级别的微服务筛选器，确保请求路由到正确的服务实例
-- **安全认证**：支持 token 验证和权限控制
-- **跨域支持**：内置跨域处理中间件
-- **性能监控**：记录高延时请求，便于性能优化
-
-## 技术栈
-
-- **Go 1.24.0**：主要开发语言
-- **cosgo**：基础框架
-- **cosweb**：HTTP 服务框架
-- **cosnet**：TCP 网络框架
-- **coswss**：WebSocket 服务框架
-- **cosrpc**：RPC 服务框架
-- **logger**：日志框架
-
-## 项目结构
-
-```
-gateway/
-├── channel/          # 频道系统，用于消息广播
-├── errors/           # 错误定义
-├── example/          # 示例代码
-├── gwcfg/            # 网关配置
-├── players/          # 会话管理
-├── rpcx/             # RPC 服务
-├── token/            # 认证系统
-├── gate_http.go      # HTTP 服务实现
-├── gate_tcp.go       # TCP 服务实现
-├── gate_wss.go       # WebSocket 服务实现
-├── proxy.go          # 代理转发实现
-├── service.go        # 服务实现
-├── config.toml       # 配置文件
-└── README.md         # 项目说明
-```
+多协议游戏网关。支持 HTTP 短连接、TCP 长连接、WebSocket，统一认证、RPC 代理转发、频道广播。
 
 ## 快速开始
 
-### 安装依赖
-
-```bash
-go mod tidy
+```go
+cosgo.Use(gateway.New())
+cosgo.Start(true)
 ```
-
-### 配置文件
-
-编辑 `config.toml` 文件，配置网关服务：
 
 ```toml
-# 程序中所有参数都可以在这里配置并覆盖默认配置
-# 参数列表可以在命令行模式下使用 -h 参数启动查看
-debug=true
-appid="gate"              # 服务器 APPID, MASTAR 中创建的游戏 ID
-developer="123456"        # 开发者密钥，用于 GM 命令
-#pid="pid"                # 生产环境创建 pid 目录，并打开这个
-logs.level=0               # 日志等级
-#logs.path=""              # 日志路径
-
-[rpcx]
-#redis="127.0.0.1:6379?db=1&password=123456"  # Redis 地址，用于服务发现
-address="127.0.0.1:8100"  # RPC 服务地址，一般使用默认值，使用内网 IP
-
-#################以下配置按服务器取舍#######################
 [gate]
-address=":8000"            # 网关服务地址
-protocol=7                 # 协议类型：1-websocket，2-长连接，4-短链接，可组合使用
-static.root="wwwroot"      # 静态文件根目录
-static.route="ui"          # 静态文件路由
-static.index="index.html"  # 静态文件索引页
+address = ":8000"
+protocol = 7       # 1=WSS, 2=TCP, 4=HTTP, 可组合(7=全开)
+websocket = "ws"
 
-# 网关转发规则，默认使用服务发现
-# local: 使用本地服务
-# process: 进程内调用
-# discovery: 服务器发现，必须配置 rpcx.redis
 [service]
-game="local"               # 游戏服务
-locator="local"            # 定位服务
+game = "local"     # local | process | discovery
 ```
 
-### 运行示例
+## 架构
 
-```bash
-cd example
-go run main.go
+```
+客户端 ──HTTP──→ cosweb ──→ proxyRequest() ──RPC──→ 游戏服
+客户端 ──TCP───→ cosnet ──→ proxyRequest() ──RPC──→ 游戏服
+客户端 ──WSS───→ coswss ──→ cosnet ──→ proxyRequest() ──→ 游戏服
 ```
 
-### 集成到现有项目
+所有协议最终汇入 `proxyRequest()`：路由解析 → 权限验证 → RPC 调用 → 响应处理。
+
+## 认证流程
+
+```
+HTTP:  POST /oauth {access:"加密token"} → token.Verify → players.Login → session
+TCP:   C2SOAuth 消息 → token.Verify → players.Connect → socket 绑定
+WSS:   握手时 query/cookie 验证 → 自动登录，或连接后 C2SOAuth 认证
+```
+
+GM 快速登录：`{guid:"test", secret:"开发者密钥"}`
+
+## 消息推送
 
 ```go
-package main
-
-import (
-    "fmt"
-    "gateway"
-
-    "github.com/hwcer/cosgo"
-)
-
-func main() {
-    cosgo.SetBanner(banner)
-    cosgo.Use(gateway.New())
-    cosgo.Start(true)
-}
-
-func banner() {
-    str := "\n大威天龙，大罗法咒，般若诸佛，般若巴嘛空。\n"
-    fmt.Printf(str)
-}
+// 服务端 → 网关 → 客户端（通过 RPC 元数据驱动）
+send      — 单点推送（按 GUID/UID）
+write     — Socket 直推（按 Socket ID，登录接口专用）
+broadcast — 全服广播（支持 ignore 排除列表）
 ```
 
-## API 说明
+## 频道系统
 
-### HTTP 接口
+```go
+// 通过 RPC 响应元数据控制
+channel.join.{name} = value   // 加入频道
+channel.leave.{name} = value  // 离开频道
+channel/broadcast             // 频道广播
+channel/delete                // 销毁频道
+```
 
-- **POST /oauth**：认证接口，用于获取会话密钥
-- **POST /* **：代理接口，用于转发请求到后端服务
+同名频道每个玩家只能加入一个，切换时自动离开旧频道。非固定频道人数归零自动销毁。
 
-### TCP 命令
+## 权限控制
 
-- **ping**：心跳命令，返回当前时间戳
-- **oauth**：认证命令，用于登录
-- **C2SReconnect**：重连命令，用于断线重连
+```go
+gwcfg.Authorize.Set(servicePath, method, gwcfg.OAuthTypePlayer)
+```
 
-### WebSocket 连接
+| 级别 | 说明 |
+|------|------|
+| `OAuthTypeNone` | 无需登录 |
+| `OAuthTypeOAuth` | 需要登录（账号级） |
+| `OAuthTypeSelect` | 需要选角 |
+| `OAuthTypePlayer` | 需要选角（同 Select） |
 
-WebSocket 连接支持两种认证方式：
-1. 通过 `Sec-WebSocket-Protocol` 头传递 token
-2. 通过 URL query 参数传递 token（`access`、`guid`、`secret`）
+支持 `IsMaster` 标记，限制仅开发者访问。
 
-## 配置项说明
+## 本轮修复
 
-### 全局配置
+| 修复 | 说明 |
+|------|------|
+| WSVerify 启用 | 维护模式拦截 + session 自动登录，不再无验证放行 |
+| CORS Headers | `strings.Join` 单字符串 → `Headers...` 正确传入多个头 |
+| 正则预编译 | 账号验证 `regexp.MatchString` → `regexp.MustCompile` |
+| 高延时日志 | 不再打印 body 内容，只打印长度，防止泄露敏感数据 |
+| Sockets.Start 双调 | 移除重复的 `EventTypStarted` 注册 |
+| 死代码清理 | `HttpContent.uri`、`HttpServer.redis`、注释代码块 |
+| cosweb API 适配 | `allow.Handle` → `allow.Middleware`，Static 中间件重构 |
+| 依赖升级 | cosgo v1.8.0, cosnet v1.4.2, cosrpc v1.4.1, cosweb v1.4.1, coswss v0.4.0 |
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| debug | bool | false | 是否开启调试模式 |
-| appid | string | "gate" | 服务器 APPID |
-| developer | string | "" | 开发者密钥 |
-| logs.level | int | 0 | 日志等级 |
-| logs.path | string | "" | 日志路径 |
+## 目录结构
 
-### RPCX 配置
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| redis | string | "" | Redis 地址，用于服务发现 |
-| address | string | "127.0.0.1:8100" | RPC 服务地址 |
-
-### GATE 配置
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| address | string | ":8000" | 网关服务地址 |
-| protocol | int | 7 | 协议类型：1-websocket，2-长连接，4-短链接 |
-| static.root | string | "" | 静态文件根目录 |
-| static.route | string | "" | 静态文件路由 |
-| static.index | string | "" | 静态文件索引页 |
-
-### SERVICE 配置
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| game | string | "local" | 游戏服务 |
-| locator | string | "local" | 定位服务 |
-
-## 开发指南
-
-### 添加新的协议处理
-
-1. 在 `gateway` 目录下创建新的协议处理文件，如 `gate_xxx.go`
-2. 实现协议处理结构体和方法
-3. 在 `init` 函数中注册协议处理
-
-### 添加新的服务
-
-1. 在 `service.go` 文件中使用 `Register` 函数注册新服务
-2. 实现服务方法，方法接收 `*cosrpc.Context` 参数
-
-### 消息推送
-
-- **单点推送**：使用 `send` 服务，通过 `ServiceMetadataUID` 或 `ServiceMetadataGUID` 指定用户
-- **全服广播**：使用 `broadcast` 服务
-- **频道广播**：使用 `channel/Broadcast` 方法
-
-## 性能优化
-
-1. **使用连接池**：对于数据库和 Redis 连接，使用连接池减少连接建立开销
-2. **减少内存分配**：使用对象池和缓冲区池，减少 GC 压力
-3. **优化路由**：合理设计路由规则，减少路由查找时间
-4. **使用异步处理**：对于耗时操作，使用异步处理，避免阻塞主线程
-5. **监控高延时请求**：根据日志中的高延时请求，针对性优化
-
-## 安全建议
-
-1. **使用 HTTPS**：在生产环境中，使用 HTTPS 加密传输
-2. **加强认证**：使用强密码和 token 验证，定期更换密钥
-3. **限制请求频率**：添加请求频率限制，防止 DoS 攻击
-4. **过滤输入**：对用户输入进行严格过滤，防止注入攻击
-5. **定期更新依赖**：定期更新依赖库，修复安全漏洞
-
-## 许可证
-
-MIT License
-
-## 联系方式
-
-如有问题或建议，欢迎联系我们。
-
+```
+gateway/
+├── module.go         模块生命周期（Init/Start/Reload/Close）
+├── gate_http.go      HTTP 短连接服务 + OAuth + 代理
+├── gate_tcp.go       TCP 长连接服务 + 认证 + 重连
+├── gate_wss.go       WebSocket 握手验证 + 连接建立
+├── proxy.go          统一代理转发（路由→鉴权→RPC→响应）
+├── access.go         权限验证（None/OAuth/Player）
+├── context.go        Proxy 接口 + Context 构造
+├── service.go        消息推送服务（send/write/broadcast）
+├── cookies.go        RPC 响应元数据 → session 更新
+├── setting.go        全局配置（路由/序列化/认证回调）
+├── channel/
+│   ├── channel.go    频道实例（Join/Leave/Broadcast）
+│   ├── manage.go     频道管理（sync.Map）
+│   ├── setter.go     玩家频道成员关系（session 存储）
+│   ├── func.go       频道名编解码
+│   └── options.go    SendMessage 回调
+├── gwcfg/
+│   ├── options.go    配置结构体 + 协议位标记
+│   ├── authorize.go  权限规则注册
+│   ├── cookies.go    Cookie 白名单
+│   ├── metadata.go   元数据常量
+│   └── func.go       工具函数
+├── players/
+│   ├── players.go    玩家会话管理（Login/Delete/Range）
+│   └── socket.go     Socket 绑定/顶号/重连
+├── token/
+│   └── token.go      Token 验证（GCM 解密 + GM 快速登录）
+└── errors/
+    └── errors.go     错误常量
+```

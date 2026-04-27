@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc"
@@ -44,7 +43,6 @@ type TcpServer struct {
 // 返回值:
 //   - error: 初始化过程中的错误
 func (this *TcpServer) init() error {
-	cosgo.On(cosgo.EventTypStarted, this.Sockets.Start)
 	session.On(session.EventHeartbeat, this.heartbeat)
 
 	// 注册事件回调
@@ -54,15 +52,19 @@ func (this *TcpServer) init() error {
 	this.Sockets.Options.Heartbeat = 0 //关闭计时器,由session接管
 	// 注册服务
 	service := this.Sockets.Service()
-	for k, _ := range cosrpc.Service {
-		_ = service.Register(this.proxy, fmt.Sprintf("/%s/*", k)) // 注册代理服务，处理所有请求
+	for k := range cosrpc.Service {
+		_ = service.Register(this.proxy, fmt.Sprintf("/%s/*", k))
 	}
 
 	if Setting.C2SOAuth != "" {
 		_ = service.Register(this.C2SOAuth, Setting.C2SOAuth) // 注册认证服务
 	}
-	_ = service.Register(this.C2SHeartbeat, Setting.C2SHeartbeat) // 注册心跳服务
-	_ = service.Register(this.C2SReconnect, Setting.C2SReconnect) // 注册重连服务
+	if Setting.C2SHeartbeat != "" {
+		_ = service.Register(this.C2SHeartbeat, Setting.C2SHeartbeat)
+	}
+	if Setting.C2SReconnect != "" {
+		_ = service.Register(this.C2SReconnect, Setting.C2SReconnect)
+	}
 
 	// 设置序列化器
 	h := this.Sockets.Handler()
@@ -136,13 +138,12 @@ func (this *TcpServer) C2SHeartbeat(c *cosnet.Context) any {
 // 返回值:
 //   - any: 认证结果
 func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
-	var err error
-	args := &token.Args{}
-	if err = c.Bind(&args); err != nil {
+	args := Setting.C2SOAuthArgs()
+	if err := c.Bind(args); err != nil {
 		return err
 	}
-	// 验证token
-	data, err := args.Verify()
+	// 验证 token
+	data, err := token.Verify(args)
 	if err != nil {
 		return err
 	}
@@ -191,7 +192,7 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	if S2CSecretHandle, ok := Setting.S2CSecret.(S2CSecret); ok {
 		S2CSecretHandle.S2CSecret(sock, ts)
 	} else if S2CSecretString, ok := Setting.S2CSecret.(string); ok {
-		_ = sock.SendWithMagic(message.MagicNumberPathBytes, message.FlagNoreply, 0, S2CSecretString, ts)
+		_ = sock.Send(message.FlagNoreply, 0, S2CSecretString, ts)
 	} else {
 		logger.Alert("gateway Setting.S2CSecret not support")
 	}
@@ -217,7 +218,7 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if S2CReplacedHandle, ok := Setting.S2CReplaced.(S2CReplaced); ok {
 		S2CReplacedHandle.S2CReplaced(sock, ip)
 	} else if S2CReplacedString, ok := Setting.S2CReplaced.(string); ok {
-		_ = sock.SendWithMagic(message.MagicNumberPathBytes, message.FlagNoreply, 0, S2CReplacedString, ip)
+		_ = sock.Send(message.FlagNoreply, 0, S2CReplacedString, ip)
 	} else {
 		logger.Alert("gateway Setting.S2CReplaced not support")
 	}
@@ -354,7 +355,7 @@ func (this *SocketContext) Metadata() values.Metadata {
 	meta := values.Metadata{}
 	if _, q, _ := this.Context.Path(); q != "" {
 		query, _ := url.ParseQuery(q)
-		for k, _ := range query {
+		for k := range query {
 			meta[k] = query.Get(k)
 		}
 	}

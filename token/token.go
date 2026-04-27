@@ -13,50 +13,70 @@ import (
 	"github.com/hwcer/cosgo/utils"
 )
 
-// 默认的 认证方式
-type Token struct {
-	//Guid      string `json:"guid"`
+type Args interface {
+	GetGuid() string
+	GetAccess() string
+	GetSecret() string
+}
+
+var NewArgs = func() Args {
+	return &ArgsDefault{}
+}
+
+// Result 默认的 认证方式
+type Result struct {
 	Appid     string `json:"appid"`
 	Openid    string `json:"openid"`
 	Expire    int64  `json:"expire"`
 	Developer bool   `json:"developer"`
 }
 
-type Args struct {
+type ArgsDefault struct {
 	Guid   string `json:"guid"`
 	Access string `json:"access"`
 	Secret string `json:"secret"`
 }
 
-func (this *Args) Verify() (r *Token, err error) {
-	r = &Token{}
+func (t *ArgsDefault) GetGuid() string {
+	return t.Guid
+}
+func (t *ArgsDefault) GetAccess() string {
+	return t.Access
+}
+func (t *ArgsDefault) GetSecret() string {
+	return t.Secret
+}
+
+func Verify(args Args) (r *Result, err error) {
+	r = &Result{}
 	//是否开启 GM
-	if this.Secret != "" {
+	if secret := args.GetSecret(); secret != "" {
 		if gwcfg.Options.Developer == "" {
 			return nil, fmt.Errorf("GM commands are disabled")
 		}
-		if this.Secret != gwcfg.Options.Developer {
+		if secret != gwcfg.Options.Developer {
 			return nil, fmt.Errorf("GM commands error")
 		}
 		r.Developer = true
 	}
 	//GM 模式允许快速登录
-	if this.Guid != "" && r.Developer {
-		if err = this.validateAccountComprehensive(this.Guid); err != nil {
+	if guid := args.GetGuid(); guid != "" && r.Developer {
+		if err = validateAccountComprehensive(guid); err != nil {
 			return
 		}
-		r.Openid = this.Guid
+		r.Openid = guid
 		return
 	}
 	//正常游戏模式
-	if this.Access == "" {
+	access := args.GetAccess()
+	if access == "" {
 		return nil, session.ErrorSessionEmpty
 	}
 	if gwcfg.Options.Secret == "" {
 		return nil, session.Errorf("Options.Secret is empty")
 	}
 	var s string
-	if s, err = utils.Crypto.GCMDecrypt(this.Access, gwcfg.Options.Secret, nil); err != nil {
+	if s, err = utils.Crypto.GCMDecrypt(access, gwcfg.Options.Secret, nil); err != nil {
 		return nil, session.Errorf(err)
 	}
 	if err = json.Unmarshal([]byte(s), r); err != nil {
@@ -77,14 +97,11 @@ func (this *Args) Verify() (r *Token, err error) {
 	return
 }
 
-// 综合验证函数
-func (this *Args) validateAccountComprehensive(account string) error {
-	// 检查是否只包含允许的字符（可选）
-	pattern := `^[a-zA-Z0-9~!@#$%^&*()_+\-=\[\]\\{}|;':",./<>?]{2,64}$`
-	matched, _ := regexp.MatchString(pattern, account)
-	if !matched {
-		return fmt.Errorf("账号规则 %s", pattern)
-	}
+var accountPattern = regexp.MustCompile(`^[a-zA-Z0-9~!@#$%^&*()_+\-=\[\]\\{}|;':",./<>?]{2,64}$`)
 
+func validateAccountComprehensive(account string) error {
+	if !accountPattern.MatchString(account) {
+		return fmt.Errorf("账号规则不合法")
+	}
 	return nil
 }

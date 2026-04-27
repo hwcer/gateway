@@ -46,12 +46,6 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	req := proxy.Metadata()
 	res := make(values.Metadata)
 
-	// 获取请求路径
-	//var path string
-	//if path, err = h.Path(); err != nil {
-	//	return nil, err
-	//}
-
 	// 路由解析和权限验证
 	var p *session.Data
 	var servicePath, serviceMethod string
@@ -95,7 +89,7 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	startTime := time.Now()
 	defer func() {
 		if elapsed := time.Since(startTime); elapsed > ElapsedMillisecond {
-			logger.Alert("发现高延时请求,TIME:%v,PATH:%v,BODY:%v", elapsed, path, string(body))
+			logger.Alert("发现高延时请求,TIME:%v,PATH:%v,LEN:%d", elapsed, path, len(body))
 		}
 	}()
 

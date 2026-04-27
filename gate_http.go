@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
+	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc"
@@ -47,7 +47,6 @@ func NewHttpServer() *HttpServer {
 // 用于处理HTTP短连接请求
 type HttpServer struct {
 	*cosweb.Server
-	redis  any //是否使用redis存储session信息
 	static *cosweb.Static
 }
 
@@ -61,11 +60,11 @@ func (this *HttpServer) init() (err error) {
 	allow := middleware.NewAccessControlAllow()
 	allow.Origin("*")
 	allow.Methods(Method...)
-	allow.Headers(strings.Join(Headers, ","))
-	this.Server.Use(allow.Handle)
+	allow.Headers(Headers...)
+	this.Server.Use(allow.Middleware)
 
-	for k, _ := range cosrpc.Service {
-		this.Server.Register(fmt.Sprintf("/%s/*", k), this.proxy, Method...) // 注册代理服务，处理所有POST请求
+	for k := range cosrpc.Service {
+		this.Server.Register(fmt.Sprintf("/%s/*", k), this.proxy, Method...)
 	}
 
 	// 设置序列化器
@@ -80,6 +79,9 @@ func (this *HttpServer) init() (err error) {
 	// 静态文件服务
 	if gwcfg.Options.Gate.Static != nil && gwcfg.Options.Gate.Static.Root != "" {
 		this.static = this.Server.Static(gwcfg.Options.Gate.Static.Route, gwcfg.Options.Gate.Static.Root, http.MethodGet)
+		if cosgo.Debug() {
+			this.static.Nocache(true)
+		}
 		if gwcfg.Options.Gate.Static.Index != "" {
 			this.static.Index(gwcfg.Options.Gate.Static.Index)
 		}
@@ -88,24 +90,16 @@ func (this *HttpServer) init() (err error) {
 }
 
 func (this *HttpServer) wss() error {
-	if gwcfg.Options.Gate.Static != nil && gwcfg.Options.Gate.Static.Root != "" && registry.Join(gwcfg.Options.Gate.Static.Route) == registry.Join(gwcfg.Options.Gate.Websocket) {
-		this.static.Use(this.wssMiddlewareFunc)
-		return nil
-	}
-	this.Server.Register(gwcfg.Options.Gate.Websocket, func(c *cosweb.Context) any {
-		coswss.Handler(TCP.Sockets, c.Response, c.Request)
-		return nil
+	wsPath := registry.Join(gwcfg.Options.Gate.Websocket)
+	this.Server.Use(func(c *cosweb.Context, next cosweb.Next) error {
+		if c.Request.URL.Path == wsPath && coswss.IsWebSocket(c.Request) {
+			coswss.Handler(TCP.Sockets, c.Response, c.Request)
+			return nil
+		}
+		return next()
 	})
 	return nil
 }
-func (this *HttpServer) wssMiddlewareFunc(c *cosweb.Context, next cosweb.Next) error {
-	if !coswss.IsWebSocket(c.Request) {
-		return next()
-	}
-	coswss.Handler(TCP.Sockets, c.Response, c.Request)
-	return nil
-}
-
 // serialize 序列化函数
 // 用于序列化响应数据
 // 参数:
@@ -162,12 +156,12 @@ func (this *HttpServer) Accept(ln net.Listener) (err error) {
 // 返回值:
 //   - any: 认证结果，包含会话密钥
 func (this *HttpServer) oauth(c *cosweb.Context) any {
-	args := &token.Args{}
-	if err := c.Bind(&args); err != nil {
+	args := Setting.C2SOAuthArgs()
+	if err := c.Bind(args); err != nil {
 		return err
 	}
 	// 验证 token
-	data, err := args.Verify()
+	data, err := token.Verify(args)
 	if err != nil {
 		return err
 	}
@@ -219,7 +213,6 @@ func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 // 实现gwcfg.Context接口，用于HTTP请求的代理
 type HttpContent struct {
 	*cosweb.Context
-	uri      *url.URL
 	metadata values.Metadata
 }
 
@@ -269,13 +262,6 @@ func (this *HttpContent) Verify() (*session.Data, error) {
 	if this.Context.Session != nil && this.Context.Session.Data != nil {
 		return this.Context.Session.Data, nil
 	}
-	// 获取 token
-	//var s string
-	//if this.cookie != nil {
-	//	s = this.cookie.Value
-	//} else {
-	//	s = this.Context.GetString(session.Options.Name, cosweb.RequestDataTypeCookie, cosweb.RequestDataTypeQuery, cosweb.RequestDataTypeHeader)
-	//}
 	s := this.Context.GetString(session.Options.Name, cosweb.RequestDataTypeCookie, cosweb.RequestDataTypeQuery, cosweb.RequestDataTypeHeader)
 	// 验证 token
 	if s == "" {
@@ -295,7 +281,7 @@ func (this *HttpContent) Header() map[string]string {
 	// 设置 Content-Type
 	r := make(map[string]string)
 	header := this.Context.Header()
-	for k, _ := range header {
+	for k := range header {
 		switch k {
 		case binder.HeaderContentType:
 			if t := this.getContentType(binder.HeaderContentType, ";"); t != "" {
@@ -330,7 +316,7 @@ func (this *HttpContent) Metadata() values.Metadata {
 	this.metadata = make(values.Metadata)
 	// 从 URL 查询参数中获取元数据
 	q := this.Context.Request.URL.Query()
-	for k, _ := range q {
+	for k := range q {
 		this.metadata[k] = q.Get(k)
 	}
 	return this.metadata
