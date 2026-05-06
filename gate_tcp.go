@@ -359,6 +359,11 @@ func (this *SocketContext) Metadata() values.Metadata {
 			meta[k] = query.Get(k)
 		}
 	}
+
+	header := this.Header()
+	meta[binder.HeaderAccept] = header[binder.HeaderAccept]
+	meta[binder.HeaderContentType] = header[binder.HeaderContentType]
+	
 	meta[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
 	return meta
 }

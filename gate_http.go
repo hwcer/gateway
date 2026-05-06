@@ -100,6 +100,7 @@ func (this *HttpServer) wss() error {
 	})
 	return nil
 }
+
 // serialize 序列化函数
 // 用于序列化响应数据
 // 参数:
@@ -319,6 +320,10 @@ func (this *HttpContent) Metadata() values.Metadata {
 	for k := range q {
 		this.metadata[k] = q.Get(k)
 	}
+	header := this.Header()
+	this.metadata[binder.HeaderAccept] = header[binder.HeaderAccept]
+	this.metadata[binder.HeaderContentType] = header[binder.HeaderContentType]
+
 	return this.metadata
 }
 
