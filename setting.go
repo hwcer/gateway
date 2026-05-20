@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/hwcer/cosnet"
@@ -46,7 +45,6 @@ type S2CReplaced interface {
 }
 
 var Setting = struct {
-	Errorf       func(err error) []byte                         //格式化输出网关错误
 	Router       router                                         //路由处理规则
 	C2SOAuth     string                                         //网关登录,置空时不启用默认验证方式
 	G2SOAuth     string                                         //游戏服登录验证,网关登录登录成功后继续使用GUID去游戏服验证,留空不进行验证
@@ -59,7 +57,6 @@ var Setting = struct {
 	C2SReconnect string                                         //客户端断线重连包名
 	C2SOAuthArgs func() token.Args                              //收到 C2SOAuth 用于解析 参数的方法
 }{
-	Errorf:       defaultErrorf,
 	Router:       defaultRouter,
 	C2SOAuth:     "oauth",
 	Serialize:    defaultSerialize,
@@ -71,11 +68,6 @@ var Setting = struct {
 }
 
 type router func(path string, req values.Metadata) (servicePath, serviceMethod string, err error)
-
-var defaultErrorf = func(err error) []byte {
-	b, _ := json.Marshal(values.Errorf(0, err))
-	return b
-}
 
 // Router 默认路由处理方式
 func defaultRouter(path string, req values.Metadata) (servicePath, serviceMethod string, err error) {

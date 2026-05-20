@@ -36,10 +36,6 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("%v", e)
 		}
-		if err != nil && Setting.Errorf != nil {
-			reply = Setting.Errorf(err)
-			err = nil
-		}
 	}()
 
 	// 获取请求元数据和创建响应元数据
