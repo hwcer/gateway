@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosnet"
@@ -17,30 +18,36 @@ func init() {
 	coswss.Options.Accept = WSAccept
 }
 
-// WSVerify WebSocket 握手前验证
-// 维护模式下拒绝非开发者连接；有 session 凭证时自动登录，无凭证允许连接后续通过 C2SOAuth 认证
+const (
+	WS_Auth_Sec_WebSocket_Protocol = "auth"
+)
+
 func WSVerify(_ http.ResponseWriter, r *http.Request) (meta map[string]string, err error) {
+	qs := r.URL.Query()
 	if gwcfg.Options.Maintenance {
-		secret := r.URL.Query().Get("secret")
+		secret := qs.Get("secret")
 		if secret == "" || secret != gwcfg.Options.Developer {
 			return nil, errors.ErrServerMaintenance
 		}
 	}
-	// 从 query 或 cookie 获取 session token，支持握手时自动登录
-	token := r.URL.Query().Get(session.Options.Name)
-	if token == "" {
-		if c, e := r.Cookie(session.Options.Name); e == nil {
-			token = c.Value
+	// 优先从次级协议获取 token（格式: "auth, <token>"），其次从 query 获取
+	var token string
+	if proto := r.Header.Get("Sec-WebSocket-Protocol"); proto != "" {
+		if parts := strings.SplitN(proto, ",", 2); len(parts) == 2 && strings.TrimSpace(parts[0]) == WS_Auth_Sec_WebSocket_Protocol {
+			token = strings.TrimSpace(parts[1])
 		}
+	}
+	if token == "" {
+		token = qs.Get(session.Options.Name)
 	}
 	if token == "" {
 		return nil, nil
 	}
 	ss := session.New()
-	if err = ss.Verify(token); err != nil {
-		return nil, err
-	}
 	meta = map[string]string{gwcfg.ServiceMetadataGUID: ss.Data.UUID()}
+	if err = ss.Verify(token); err == nil {
+		meta[gwcfg.ServiceMetadataGUID] = ss.Data.UUID()
+	}
 	return meta, nil
 }
 func WSAccept(sock *cosnet.Socket, meta map[string]string) {
