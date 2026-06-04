@@ -3,10 +3,10 @@ module github.com/hwcer/gateway
 go 1.25.0
 
 require (
-	github.com/hwcer/cosgo v1.8.0
+	github.com/hwcer/cosgo v1.8.3-0.20260604072643-a40b863e7bf4
 	github.com/hwcer/cosnet v1.4.2
 	github.com/hwcer/cosrpc v1.4.1
-	github.com/hwcer/cosweb v1.4.1
+	github.com/hwcer/cosweb v1.4.2-0.20260604072920-baa7d59fe977
 	github.com/hwcer/coswss v0.4.0
 	github.com/hwcer/logger v0.2.8
 	go.mongodb.org/mongo-driver/v2 v2.5.1 // indirect

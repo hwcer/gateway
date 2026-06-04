@@ -91,13 +91,13 @@ func (this *HttpServer) init() (err error) {
 
 func (this *HttpServer) wss() error {
 	wsPath := registry.Join(gwcfg.Options.Gate.Websocket)
-	this.Server.Use(func(c *cosweb.Context, next cosweb.Next) error {
-		if c.Request.URL.Path == wsPath && coswss.IsWebSocket(c.Request) {
-			coswss.Handler(TCP.Sockets, c.Response, c.Request)
-			return nil
+	this.Server.Register(wsPath, func(c *cosweb.Context) any {
+		if !coswss.IsWebSocket(c.Request) {
+			return c.Next()
 		}
-		return next()
-	})
+		coswss.Handler(TCP.Sockets, c.Response, c.Request)
+		return nil
+	}, http.MethodGet)
 	return nil
 }
 
