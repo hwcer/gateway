@@ -192,7 +192,7 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	if S2CSecretHandle, ok := Setting.S2CSecret.(S2CSecret); ok {
 		S2CSecretHandle.S2CSecret(sock, ts)
 	} else if S2CSecretString, ok := Setting.S2CSecret.(string); ok {
-		_ = sock.Send(message.FlagNoreply, 0, S2CSecretString, ts)
+		_ = sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, S2CSecretString, ts)
 	} else {
 		logger.Alert("gateway Setting.S2CSecret not support")
 	}
@@ -218,7 +218,7 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if S2CReplacedHandle, ok := Setting.S2CReplaced.(S2CReplaced); ok {
 		S2CReplacedHandle.S2CReplaced(sock, ip)
 	} else if S2CReplacedString, ok := Setting.S2CReplaced.(string); ok {
-		_ = sock.Send(message.FlagNoreply, 0, S2CReplacedString, ip)
+		_ = sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, S2CReplacedString, ip)
 	} else {
 		logger.Alert("gateway Setting.S2CReplaced not support")
 	}
@@ -363,7 +363,7 @@ func (this *SocketContext) Metadata() values.Metadata {
 	header := this.Header()
 	meta[binder.HeaderAccept] = header[binder.HeaderAccept]
 	meta[binder.HeaderContentType] = header[binder.HeaderContentType]
-	
+
 	meta[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
 	return meta
 }

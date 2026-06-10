@@ -51,8 +51,8 @@ var Setting = struct {
 	Request      func(c *Context, args []byte) ([]byte, error)  //网关转发消息时,如果数据有加密，可以在解密之后转发
 	Response     func(c *Context, reply []byte) ([]byte, error) //rpc 返回数据时,推送消息时只有Session,广播时 Context为NIL
 	Serialize    func(accept Accept, reply any) ([]byte, error) //序列化方式
-	S2CSecret    any                                            //登录成功时给客户端发送秘钥,空值不处理,协议名或者回调函数 string(S2CSecret) || S2CSecret interface
-	S2CReplaced  any                                            //被顶号时给客户端发送的顶号提示,空值不处理
+	S2CSecret    any                                            //登录成功时给客户端发送秘钥,nil不处理; string时作为路径使用MagicNumberPathJson发送JSON; 或实现S2CSecret接口自定义处理
+	S2CReplaced  any                                            //被顶号时给客户端发送顶号提示,nil不处理; string时作为路径使用MagicNumberPathJson发送JSON; 或实现S2CReplaced接口自定义处理
 	C2SHeartbeat string                                         //客户端心跳包名
 	C2SReconnect string                                         //客户端断线重连包名
 	C2SOAuthArgs func() token.Args                              //收到 C2SOAuth 用于解析 参数的方法
