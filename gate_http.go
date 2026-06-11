@@ -90,14 +90,18 @@ func (this *HttpServer) init() (err error) {
 }
 
 func (this *HttpServer) wss() error {
-	wsPath := registry.Join(gwcfg.Options.Gate.Websocket)
-	this.Server.Register(wsPath, func(c *cosweb.Context) any {
+	wsPrefix := registry.Join(gwcfg.Options.Gate.Websocket)
+	handler := this.Server.Handler()
+	handler.Use(func(c *cosweb.Context, next cosweb.Next) error {
 		if !coswss.IsWebSocket(c.Request) {
-			return c.Next()
+			return next()
+		}
+		if wsPrefix != "/" && !strings.HasPrefix(c.Request.URL.Path, wsPrefix) {
+			return next()
 		}
 		coswss.Handler(TCP.Sockets, c.Response, c.Request)
 		return nil
-	}, http.MethodGet)
+	})
 	return nil
 }
 

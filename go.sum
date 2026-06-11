@@ -148,6 +148,8 @@ github.com/hwcer/cosrpc v1.4.2-0.20260604075459-f6db8e16b199 h1:N6y4ZRdZeCQ4G0Ju
 github.com/hwcer/cosrpc v1.4.2-0.20260604075459-f6db8e16b199/go.mod h1:jRQC3WuFl+ptc8/DHfawElTU+64blT0D4YGB1hY8/2g=
 github.com/hwcer/cosweb v1.4.2-0.20260604075505-238843531094 h1:vkz/XRBs6SNwnt4ggqRmG9wqAVQ0p8SnY+vcVOj7TPM=
 github.com/hwcer/cosweb v1.4.2-0.20260604075505-238843531094/go.mod h1:4ZO4ccWYTKvo3eFMEI12WgaD8ML/VzIL6BAyZ4AOPw0=
+github.com/hwcer/cosweb v1.4.2-0.20260611052538-323fcd8c43f0 h1:dI6mu+YirOVbyVbrqNZxBzIPeEkbqbnuCUtptLJnwFM=
+github.com/hwcer/cosweb v1.4.2-0.20260611052538-323fcd8c43f0/go.mod h1:4ZO4ccWYTKvo3eFMEI12WgaD8ML/VzIL6BAyZ4AOPw0=
 github.com/hwcer/coswss v0.4.2-0.20260604075347-da9531549f78 h1:Sj+Vac8C6BTOXO/qe46X+iki4ZXfq7Zo/UGxob9QDqE=
 github.com/hwcer/coswss v0.4.2-0.20260604075347-da9531549f78/go.mod h1:2eVRYcIcpF6MKr94HaCgNc+tgGA/6KOFcP3cLA7tO4s=
 github.com/hwcer/logger v0.2.8 h1:TjXr/MDNuMcM+kGADa0MnviY1fs9lSwb62cQOEeros8=
