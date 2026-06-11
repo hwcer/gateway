@@ -74,7 +74,9 @@ func (this *HttpServer) init() (err error) {
 	if Setting.C2SOAuth != "" {
 		this.Server.Register(Setting.C2SOAuth, this.oauth, Method...) // 注册认证服务
 	}
-	this.Server.Register(Setting.C2SHeartbeat, this.C2SHeartbeat, Method...) // 注册心跳服务
+	if Setting.C2SHeartbeat != "" {
+		this.Server.Register(Setting.C2SHeartbeat, this.C2SHeartbeat, Method...) // 注册心跳服务
+	}
 
 	// 静态文件服务
 	if gwcfg.Options.Gate.Static != nil && gwcfg.Options.Gate.Static.Root != "" {
