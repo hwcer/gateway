@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/hwcer/cosgo"
-	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/coswss"
@@ -90,20 +89,16 @@ func (this *HttpServer) init() (err error) {
 	}
 	return nil
 }
-
+func (this *HttpServer) WebSocket(c *cosweb.Context, next cosweb.Next) error {
+	if !coswss.IsWebSocket(c.Request) {
+		return next()
+	}
+	coswss.Handler(TCP.Sockets, c.Response, c.Request)
+	return nil
+}
 func (this *HttpServer) wss() error {
-	wsPrefix := registry.Join(gwcfg.Options.Gate.Websocket)
-	handler := this.Server.Handler()
-	handler.Use(func(c *cosweb.Context, next cosweb.Next) error {
-		if !coswss.IsWebSocket(c.Request) {
-			return next()
-		}
-		if wsPrefix != "/" && !strings.HasPrefix(c.Request.URL.Path, wsPrefix) {
-			return next()
-		}
-		coswss.Handler(TCP.Sockets, c.Response, c.Request)
-		return nil
-	})
+	handler := this.Server.Handler(gwcfg.Options.Gate.Websocket)
+	handler.Use(this.WebSocket)
 	return nil
 }
 
