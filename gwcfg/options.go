@@ -55,7 +55,7 @@ var Gateway = &config{
 	Address:   "0.0.0.0:80",
 	Capacity:  10240,
 	Protocol:  2,
-	Websocket: "ws",
+	Websocket: "",
 }
 
 var Options = struct {
