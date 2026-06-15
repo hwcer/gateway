@@ -6,7 +6,7 @@ require (
 	github.com/hwcer/cosgo v1.8.3-0.20260613121924-d23364c61f6c
 	github.com/hwcer/cosnet v1.4.4-0.20260604075229-8c824b1a4e1e
 	github.com/hwcer/cosrpc v1.4.2-0.20260604075459-f6db8e16b199
-	github.com/hwcer/cosweb v1.4.2-0.20260613123507-91d756058c33
+	github.com/hwcer/cosweb v1.4.2-0.20260615102912-5a824bef5f39
 	github.com/hwcer/coswss v0.4.2-0.20260604075347-da9531549f78
 	github.com/hwcer/logger v0.2.8
 	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect

@@ -146,8 +146,8 @@ github.com/hwcer/cosnet v1.4.4-0.20260604075229-8c824b1a4e1e h1:iOQiSfb/ozOK7S0s
 github.com/hwcer/cosnet v1.4.4-0.20260604075229-8c824b1a4e1e/go.mod h1:aHnaiNK5Dr/4X9lunyYpaq9hEBtKqICFujO542VRrro=
 github.com/hwcer/cosrpc v1.4.2-0.20260604075459-f6db8e16b199 h1:N6y4ZRdZeCQ4G0JuKUPiP1CuvuSCTU4APeOL+o9EFwo=
 github.com/hwcer/cosrpc v1.4.2-0.20260604075459-f6db8e16b199/go.mod h1:jRQC3WuFl+ptc8/DHfawElTU+64blT0D4YGB1hY8/2g=
-github.com/hwcer/cosweb v1.4.2-0.20260613123507-91d756058c33 h1:QVwvazMBsXAd560eJqD3ON/abCnbpbCciPoOBodH/+4=
-github.com/hwcer/cosweb v1.4.2-0.20260613123507-91d756058c33/go.mod h1:Jturx7mF2cJE7dVIJVR0upFt1dOzbXoPcQ9sae9bVFs=
+github.com/hwcer/cosweb v1.4.2-0.20260615102912-5a824bef5f39 h1:wN5sae5OYvsQQfTGo9i5gCxihj07UJG20BPYWlwjak8=
+github.com/hwcer/cosweb v1.4.2-0.20260615102912-5a824bef5f39/go.mod h1:Jturx7mF2cJE7dVIJVR0upFt1dOzbXoPcQ9sae9bVFs=
 github.com/hwcer/coswss v0.4.2-0.20260604075347-da9531549f78 h1:Sj+Vac8C6BTOXO/qe46X+iki4ZXfq7Zo/UGxob9QDqE=
 github.com/hwcer/coswss v0.4.2-0.20260604075347-da9531549f78/go.mod h1:2eVRYcIcpF6MKr94HaCgNc+tgGA/6KOFcP3cLA7tO4s=
 github.com/hwcer/logger v0.2.8 h1:TjXr/MDNuMcM+kGADa0MnviY1fs9lSwb62cQOEeros8=
