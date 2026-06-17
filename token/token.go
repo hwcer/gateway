@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/gateway/errors"
 	"github.com/hwcer/gateway/gwcfg"
 
@@ -25,10 +26,11 @@ var NewArgs = func() Args {
 
 // Result 默认的 认证方式
 type Result struct {
-	Appid     string `json:"appid"`
-	Openid    string `json:"openid"`
-	Expire    int64  `json:"expire"`
-	Developer bool   `json:"developer"`
+	Appid     string        `json:"appid"`
+	Openid    string        `json:"openid"`
+	Expire    int64         `json:"expire"`
+	Attach    values.Values `json:"attach"`
+	Developer bool          `json:"developer"`
 }
 
 type ArgsDefault struct {

@@ -185,6 +185,12 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	if Setting.G2SOAuth == "" {
 		return cookie
 	}
+
+	attr := data.Attach
+	if ctx.body, err = binder.Json.Marshal(attr); err != nil {
+		return err
+	}
+
 	var reply []byte
 	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
 		return err
@@ -215,6 +221,7 @@ func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 // 实现gwcfg.Context接口，用于HTTP请求的代理
 type HttpContent struct {
 	*cosweb.Context
+	body     []byte
 	metadata values.Metadata
 }
 
@@ -276,6 +283,9 @@ func (this *HttpContent) Verify() (*session.Data, error) {
 }
 
 func (this *HttpContent) Buffer() (buf *bytes.Buffer, err error) {
+	if this.body == nil {
+		return bytes.NewBuffer(this.body), nil
+	}
 	return this.Context.Buffer()
 }
 

@@ -162,7 +162,10 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	if Setting.G2SOAuth == "" {
 		return nil
 	}
-
+	attr := data.Attach
+	if ctx.body, err = binder.Json.Marshal(attr); err != nil {
+		return err
+	}
 	var reply []byte
 	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
 		return err
@@ -274,6 +277,7 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 // 实现 gwcfg.Context 接口，用于TCP请求的代理
 type SocketContext struct {
 	*cosnet.Context
+	body []byte
 }
 
 // Verify 验证会话
@@ -335,6 +339,9 @@ func (this *SocketContext) Socket() *cosnet.Socket {
 //   - *bytes.Buffer: 请求体缓冲区
 //   - error: 获取过程中的错误
 func (this *SocketContext) Buffer() (buf *bytes.Buffer, err error) {
+	if this.body != nil {
+		return bytes.NewBuffer(this.body), nil
+	}
 	buff := bytes.NewBuffer(this.Context.Message.Body())
 	return buff, nil
 }
