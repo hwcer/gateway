@@ -18,6 +18,7 @@ type Args interface {
 	GetGuid() string
 	GetAccess() string
 	GetSecret() string
+	GetValues() values.Values //透传给服务器
 }
 
 var NewArgs = func() Args {
@@ -47,6 +48,9 @@ func (t *ArgsDefault) GetAccess() string {
 }
 func (t *ArgsDefault) GetSecret() string {
 	return t.Secret
+}
+func (t *ArgsDefault) GetValues() values.Values {
+	return nil
 }
 
 func Verify(args Args) (r *Result, err error) {

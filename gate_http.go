@@ -187,6 +187,12 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	}
 
 	attr := data.Attach
+	if attr == nil {
+		attr = values.Values{}
+	}
+	if v := args.GetValues(); v != nil {
+		attr.Merge(v, true)
+	}
 	if ctx.body, err = binder.Json.Marshal(attr); err != nil {
 		return err
 	}

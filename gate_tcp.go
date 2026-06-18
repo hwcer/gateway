@@ -163,6 +163,12 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 		return nil
 	}
 	attr := data.Attach
+	if attr == nil {
+		attr = values.Values{}
+	}
+	if v := args.GetValues(); v != nil {
+		attr.Merge(v, true)
+	}
 	if ctx.body, err = binder.Json.Marshal(attr); err != nil {
 		return err
 	}
