@@ -72,5 +72,7 @@ func Disconnect(sock *cosnet.Socket) (err error) {
 			setter.Delete(SessionPlayerSocketName)
 		}
 	})
+	// 立即触发掉线事件（早于 Release 销毁事件）
+	session.Emit(session.EventSessionDisconnect, data)
 	return
 }
