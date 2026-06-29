@@ -86,6 +86,10 @@ func (this *access) OAuth(r Proxy, req values.Metadata, needMaster bool) (p *ses
 	if needMaster && !this.IsDeveloper(p) {
 		err = errors.ErrNeedGameDeveloper
 	}
+	if isMaster := p.GetString(gwcfg.ServiceMetadataDeveloper); isMaster != "" {
+		req[gwcfg.ServiceMetadataDeveloper] = isMaster
+	}
+
 	return
 }
 
