@@ -87,7 +87,7 @@ func (this *access) OAuth(r Proxy, req values.Metadata, needMaster bool) (p *ses
 		err = errors.ErrNeedGameDeveloper
 	}
 	if p.GetInt32(gwcfg.ServiceMetadataDeveloper) > 0 {
-		req[gwcfg.ServiceMetadataDeveloper] = "1"
+		req.Set(gwcfg.ServiceMetadataDeveloper, 1)
 	}
 
 	return
