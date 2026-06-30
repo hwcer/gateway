@@ -151,9 +151,9 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	ctx := SocketContext{Context: c}
 	vs := values.Values{}
 	if data.Developer {
-		vs.Set(gwcfg.ServiceMetadataDeveloper, "1")
+		vs.Set(gwcfg.ServiceMetadataDeveloper, 1)
 	} else {
-		vs.Set(gwcfg.ServiceMetadataDeveloper, "")
+		vs.Set(gwcfg.ServiceMetadataDeveloper, 0)
 	}
 	if _, err = ctx.Login(data.Openid, vs); err != nil {
 		return err

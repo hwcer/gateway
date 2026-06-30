@@ -171,9 +171,9 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	ctx := HttpContent{Context: c}
 	vs := values.Values{}
 	if data.Developer {
-		vs.Set(gwcfg.ServiceMetadataDeveloper, "1")
+		vs.Set(gwcfg.ServiceMetadataDeveloper, 1)
 	} else {
-		vs.Set(gwcfg.ServiceMetadataDeveloper, "")
+		vs.Set(gwcfg.ServiceMetadataDeveloper, 0)
 	}
 
 	// 构建响应
