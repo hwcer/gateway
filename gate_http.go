@@ -197,6 +197,11 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 		return err
 	}
 
+	if ctx.header == nil {
+		ctx.header = make(map[string]string)
+	}
+	ctx.header[binder.HeaderContentType] = "application/json"
+
 	var reply []byte
 	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
 		return err
@@ -228,6 +233,7 @@ func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 type HttpContent struct {
 	*cosweb.Context
 	body     []byte
+	header   map[string]string
 	metadata values.Metadata
 }
 
@@ -315,6 +321,12 @@ func (this *HttpContent) Header() map[string]string {
 			r[k] = header.Get(k)
 		}
 	}
+	if this.header == nil {
+		return r
+	}
+	for k, v := range this.header {
+		r[k] = v
+	}
 	return r
 }
 func (this *HttpContent) Session() *session.Data {
@@ -338,9 +350,11 @@ func (this *HttpContent) Metadata() values.Metadata {
 		this.metadata[k] = q.Get(k)
 	}
 	header := this.Header()
-	this.metadata[binder.HeaderAccept] = header[binder.HeaderAccept]
+	//this.metadata[binder.HeaderAccept] = header[binder.HeaderAccept]
 	this.metadata[binder.HeaderContentType] = header[binder.HeaderContentType]
-
+	if accept := header[binder.HeaderAccept]; accept != "" && accept != this.metadata[binder.HeaderContentType] {
+		this.metadata[binder.HeaderAccept] = accept
+	}
 	return this.metadata
 }
 

@@ -172,6 +172,10 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	if ctx.body, err = binder.Json.Marshal(attr); err != nil {
 		return err
 	}
+	if ctx.header == nil {
+		ctx.header = make(map[string]string)
+	}
+	ctx.header[binder.HeaderContentType] = "application/json"
 	var reply []byte
 	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
 		return err
@@ -283,7 +287,8 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 // 实现 gwcfg.Context 接口，用于TCP请求的代理
 type SocketContext struct {
 	*cosnet.Context
-	body []byte
+	body   []byte
+	header map[string]string
 }
 
 // Verify 验证会话
@@ -358,6 +363,12 @@ func (this *SocketContext) Header() map[string]string {
 	b := magic.Binder.Name()
 	r[binder.HeaderAccept] = b
 	r[binder.HeaderContentType] = b
+	if this.header == nil {
+		return r
+	}
+	for k, v := range this.header {
+		r[k] = v
+	}
 	return r
 }
 
@@ -374,8 +385,10 @@ func (this *SocketContext) Metadata() values.Metadata {
 	}
 
 	header := this.Header()
-	meta[binder.HeaderAccept] = header[binder.HeaderAccept]
 	meta[binder.HeaderContentType] = header[binder.HeaderContentType]
+	if accept := header[binder.HeaderAccept]; accept != "" && accept != meta[binder.HeaderContentType] {
+		meta[binder.HeaderAccept] = accept
+	}
 
 	meta[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
 	return meta
