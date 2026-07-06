@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"net/http"
@@ -286,19 +285,15 @@ func (this *HttpRequest) verify() (*session.Data, error) {
 	return this.Context.Session.Data, nil
 }
 
-func (this *HttpRequest) GetBuffer() (buf *bytes.Buffer, err error) {
-	if this.body != nil {
-		return bytes.NewBuffer(this.body), nil
-	}
-	return this.Context.Buffer()
-}
-
 // Buffer 无参取值(默认读请求体)；传参设置透传请求体（遮蔽内嵌 cosweb.Context.Buffer）
 func (this *HttpRequest) Buffer(set ...[]byte) ([]byte, error) {
 	if len(set) > 0 {
 		this.body = set[0]
 	}
-	buf, err := this.GetBuffer()
+	if this.body != nil {
+		return this.body, nil
+	}
+	buf, err := this.Context.Buffer()
 	if err != nil {
 		return nil, err
 	}
@@ -313,9 +308,24 @@ func (this *HttpRequest) SetHeader(key, value string) {
 	this.header[key] = value
 }
 
-// GetHeader 读取请求头
+// GetHeader 读取请求头（不构造完整 map）
 func (this *HttpRequest) GetHeader(key string) string {
-	return this.Header()[key]
+	if this.header != nil {
+		if v, ok := this.header[key]; ok {
+			return v
+		}
+	}
+	switch key {
+	case binder.HeaderContentType:
+		if t := this.getContentType(binder.HeaderContentType, ";"); t != "" {
+			return t
+		}
+		return gwcfg.Options.Binder
+	case binder.HeaderAccept:
+		return this.getContentType(binder.HeaderAccept, ";")
+	default:
+		return this.Context.Header().Get(key)
+	}
 }
 
 func (this *HttpRequest) Header() map[string]string {
@@ -357,20 +367,21 @@ func (this *HttpRequest) Session() *session.Data {
 // 返回值:
 //   - values.Metadata: 请求元数据
 func (this *HttpRequest) Metadata() values.Metadata {
-	if this.metadata != nil {
-		return this.metadata
+	if this.metadata == nil {
+		// 仅缓存 URL 查询参数解析（静态）
+		this.metadata = make(values.Metadata)
+		q := this.Context.Request.URL.Query()
+		for k := range q {
+			this.metadata[k] = q.Get(k)
+		}
 	}
-	this.metadata = make(values.Metadata)
-	// 从 URL 查询参数中获取元数据
-	q := this.Context.Request.URL.Query()
-	for k := range q {
-		this.metadata[k] = q.Get(k)
-	}
-	header := this.Header()
-	//this.metadata[binder.HeaderAccept] = header[binder.HeaderAccept]
-	this.metadata[binder.HeaderContentType] = header[binder.HeaderContentType]
-	if accept := header[binder.HeaderAccept]; accept != "" && accept != this.metadata[binder.HeaderContentType] {
+	// header 派生字段每次刷新，反映业务 SetHeader 的改动
+	ct := this.GetHeader(binder.HeaderContentType)
+	this.metadata[binder.HeaderContentType] = ct
+	if accept := this.GetHeader(binder.HeaderAccept); accept != "" && accept != ct {
 		this.metadata[binder.HeaderAccept] = accept
+	} else {
+		delete(this.metadata, binder.HeaderAccept)
 	}
 	return this.metadata
 }

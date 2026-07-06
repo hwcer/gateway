@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"net/url"
@@ -59,10 +58,18 @@ func (this *TcpServer) init() error {
 		_ = service.Register(this.C2SOAuth, Setting.C2SOAuth) // 注册认证服务
 	}
 	if Setting.C2SHeartbeat != "" {
-		_ = service.Register(this.C2SHeartbeat, Setting.C2SHeartbeat)
+		f := this.C2SHeartbeat
+		if h, ok := Setting.Handler.(C2SHeartbeat); ok {
+			f = h.C2SHeartbeat //业务 Handler 实现则优先
+		}
+		_ = service.Register(f, Setting.C2SHeartbeat)
 	}
 	if Setting.C2SReconnect != "" {
-		_ = service.Register(this.C2SReconnect, Setting.C2SReconnect)
+		f := this.C2SReconnect
+		if h, ok := Setting.Handler.(C2SReconnect); ok {
+			f = h.C2SReconnect //业务 Handler 实现则优先
+		}
+		_ = service.Register(f, Setting.C2SReconnect)
 	}
 
 	// 设置序列化器
@@ -323,28 +330,15 @@ func (this *SocketRequest) Socket() *cosnet.Socket {
 	return this.Context.Socket
 }
 
-// Buffer 获取请求体
-// 返回值:
-//   - *bytes.Buffer: 请求体缓冲区
-//   - error: 获取过程中的错误
-func (this *SocketRequest) GetBuffer() (buf *bytes.Buffer, err error) {
-	if this.body != nil {
-		return bytes.NewBuffer(this.body), nil
-	}
-	buff := bytes.NewBuffer(this.Context.Message.Body())
-	return buff, nil
-}
-
 // Buffer 无参取值(默认读消息体)；传参设置透传请求体
 func (this *SocketRequest) Buffer(set ...[]byte) ([]byte, error) {
 	if len(set) > 0 {
 		this.body = set[0]
 	}
-	buf, err := this.GetBuffer()
-	if err != nil {
-		return nil, err
+	if this.body != nil {
+		return this.body, nil
 	}
-	return buf.Bytes(), nil
+	return this.Context.Message.Body(), nil
 }
 
 // SetHeader 业务层设置透传请求头，如 Content-Type
@@ -355,9 +349,17 @@ func (this *SocketRequest) SetHeader(key, value string) {
 	this.header[key] = value
 }
 
-// GetHeader 读取请求头
+// GetHeader 读取请求头（不构造完整 map）
 func (this *SocketRequest) GetHeader(key string) string {
-	return this.Header()[key]
+	if this.header != nil {
+		if v, ok := this.header[key]; ok {
+			return v
+		}
+	}
+	if key == binder.HeaderAccept || key == binder.HeaderContentType {
+		return this.Message.Magic().Binder.Name()
+	}
+	return ""
 }
 func (this *SocketRequest) Header() map[string]string {
 	// 设置 Content-Type
@@ -379,26 +381,26 @@ func (this *SocketRequest) Header() map[string]string {
 // 返回值:
 //   - values.Metadata: 请求元数据
 func (this *SocketRequest) Metadata() values.Metadata {
-	if this.metadata != nil {
-		return this.metadata
-	}
-	meta := values.Metadata{}
-	if _, q, _ := this.Context.Path(); q != "" {
-		query, _ := url.ParseQuery(q)
-		for k := range query {
-			meta[k] = query.Get(k)
+	if this.metadata == nil {
+		// 静态字段缓存一次：查询参数 + RequestId
+		this.metadata = values.Metadata{}
+		if _, q, _ := this.Context.Path(); q != "" {
+			query, _ := url.ParseQuery(q)
+			for k := range query {
+				this.metadata[k] = query.Get(k)
+			}
 		}
+		this.metadata[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
 	}
-
-	header := this.Header()
-	meta[binder.HeaderContentType] = header[binder.HeaderContentType]
-	if accept := header[binder.HeaderAccept]; accept != "" && accept != meta[binder.HeaderContentType] {
-		meta[binder.HeaderAccept] = accept
+	// 仅 header 派生字段每次刷新，反映业务 SetHeader 的改动
+	ct := this.GetHeader(binder.HeaderContentType)
+	this.metadata[binder.HeaderContentType] = ct
+	if accept := this.GetHeader(binder.HeaderAccept); accept != "" && accept != ct {
+		this.metadata[binder.HeaderAccept] = accept
+	} else {
+		delete(this.metadata, binder.HeaderAccept)
 	}
-
-	meta[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
-	this.metadata = meta
-	return meta
+	return this.metadata
 }
 
 // RemoteAddr 获取远程地址

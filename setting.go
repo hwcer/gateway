@@ -39,6 +39,16 @@ type Accept interface {
 	Accept() binder.Binder
 }
 
+// C2SHeartbeat 可选接口：业务 Handler 实现则覆盖网关默认心跳处理
+type C2SHeartbeat interface {
+	C2SHeartbeat(c *cosnet.Context) any
+}
+
+// C2SReconnect 可选接口：业务 Handler 实现则覆盖网关默认重连处理
+type C2SReconnect interface {
+	C2SReconnect(c *cosnet.Context) any
+}
+
 // 顶号/秘钥下发的默认包名（Default 实现用 MagicNumberPathJson 以 JSON 直接下发）
 const (
 	pathS2CSecret   = "S2CSecret"

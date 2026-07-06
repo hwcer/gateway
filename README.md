@@ -130,18 +130,28 @@ gwcfg.Authorize.Set(servicePath, method, gwcfg.OAuthTypePlayer)
 
 支持 `IsMaster` 标记，限制仅开发者访问。
 
-## 本轮修复
+## 请求上下文（context.Context）
 
-| 修复 | 说明 |
+入站请求与服务器推送统一到 `github.com/hwcer/gateway/context.Context` 接口：
+
+| 实现 | 场景 |
 |------|------|
-| WSVerify 启用 | 维护模式拦截 + session 自动登录，不再无验证放行 |
-| CORS Headers | `strings.Join` 单字符串 → `Headers...` 正确传入多个头 |
-| 正则预编译 | 账号验证 `regexp.MatchString` → `regexp.MustCompile` |
-| 高延时日志 | 不再打印 body 内容，只打印长度，防止泄露敏感数据 |
-| Sockets.Start 双调 | 移除重复的 `EventTypStarted` 注册 |
-| 死代码清理 | `HttpContent.uri`、`HttpServer.redis`、注释代码块 |
-| cosweb API 适配 | `allow.Handle` → `allow.Middleware`，Static 中间件重构 |
-| 依赖升级 | cosgo v1.8.0, cosnet v1.4.2, cosrpc v1.4.1, cosweb v1.4.1, coswss v0.4.0 |
+| `HttpRequest` | HTTP 短连接请求（内嵌 `cosweb.Context`） |
+| `SocketRequest` | TCP/WSS 长连接请求（内嵌 `cosnet.Context`） |
+| `socketContext` | 服务器推送/顶号/钩子阶段（仅 socket，无入站请求） |
+
+- `Buffer(set ...[]byte) ([]byte, error)`：无参取 body，传参设 body；`Request/Response` 钩子经此读写。
+- 网关内部另用 `Request = context.Context + login/logout/verify`，登录态操作不对业务暴露，仅 `proxyRequest`/`access` 使用。
+- `token.Args.GetValues(*Result, context.Context)`：业务层直接向上下文写透传 body/header（`data.Attach` 由业务 Args 实现处理）。
+
+## 本轮重构（context.Context 统一）
+
+| 变更 | 说明 |
+|------|------|
+| Setting 接口化 | 行为字段收敛为 `Handler` 接口 + `Default` 默认实现，业务层嵌入 `Default` 覆盖 |
+| 统一请求上下文 | `context.Context` 接口，三实现共用；`Request` 附加内部登录态操作 |
+| Buffer 取/设合一 | `Buffer(set ...[]byte)`，`Request/Response` 钩子经 `c.Buffer()` 读写 body |
+| 修复 | HTTP oauth nil socket panic、SocketRequest.Metadata 缓存丢失、IPv6 RemoteAddr、oauth 凭据泄露 |
 
 ## 目录结构
 
@@ -153,10 +163,15 @@ gateway/
 ├── gate_wss.go       WebSocket 握手验证 + 连接建立
 ├── proxy.go          统一代理转发（路由→鉴权→RPC→响应）
 ├── access.go         权限验证（None/OAuth/Player）
-├── context.go        Proxy 接口 + Context 构造
+├── context.go        Request 接口（嵌 context.Context + 内部 login/logout/verify）
+├── context_socket.go socketContext（脱离请求的 context.Context 实现，推送/钩子用）
 ├── service.go        消息推送服务（send/write/broadcast）
 ├── cookies.go        RPC 响应元数据 → session 更新
-├── setting.go        全局配置（路由/序列化/认证回调）
+├── setting.go        全局配置 + Handler 行为接口 + Default 默认实现
+├── context/
+│   ├── context.go    context.Context 统一请求上下文接口
+│   ├── channel.go    频道辅助（Channel/Broadcast）
+│   └── selector.go   服务筛选器辅助
 ├── channel/
 │   ├── channel.go    频道实例（Join/Leave/Broadcast）
 │   ├── manage.go     频道管理（sync.Map）
