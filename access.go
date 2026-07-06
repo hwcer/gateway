@@ -8,7 +8,6 @@ import (
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
-	"github.com/hwcer/cosnet"
 )
 
 // 接口权限判定 必须注册所有 options.OAuthType
@@ -22,11 +21,7 @@ func init() {
 	Access.Register(gwcfg.OAuthTypePlayer, Access.Player)
 }
 
-type accessSocket interface {
-	Socket() *cosnet.Socket
-}
-
-type accessFunc func(r Proxy, req values.Metadata, isMaster bool) (*session.Data, error)
+type accessFunc func(r Request, req values.Metadata, isMaster bool) (*session.Data, error)
 
 type access struct {
 	dict map[gwcfg.OAuthType]accessFunc
@@ -38,7 +33,7 @@ func (this *access) Register(l gwcfg.OAuthType, f accessFunc) {
 	}
 	this.dict[l] = f
 }
-func (this *access) Verify(c Proxy, req values.Metadata, servicePath, serviceMethod string) (*session.Data, error) {
+func (this *access) Verify(c Request, req values.Metadata, servicePath, serviceMethod string) (*session.Data, error) {
 	l, s := gwcfg.Authorize.Get(servicePath, serviceMethod)
 	isMaster := gwcfg.Authorize.IsMaster(s)
 	f, ok := this.dict[l]
@@ -53,8 +48,8 @@ func (this *access) Verify(c Proxy, req values.Metadata, servicePath, serviceMet
 	return p, nil
 }
 
-func (this *access) oauth(r Proxy, req values.Metadata) (p *session.Data, err error) {
-	if p, err = r.Verify(); err != nil {
+func (this *access) oauth(r Request, req values.Metadata) (p *session.Data, err error) {
+	if p, err = r.verify(); err != nil {
 		return nil, err
 	} else if p == nil {
 		return nil, session.ErrorSessionUnknown
@@ -63,9 +58,8 @@ func (this *access) oauth(r Proxy, req values.Metadata) (p *session.Data, err er
 }
 
 // None 普通接口
-func (this *access) None(r Proxy, req values.Metadata, isMaster bool) (p *session.Data, err error) {
-	if f, ok := r.(accessSocket); ok {
-		sock := f.Socket()
+func (this *access) None(r Request, req values.Metadata, isMaster bool) (p *session.Data, err error) {
+	if sock := r.Socket(); sock != nil {
 		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
 	}
 	req[gwcfg.ServiceMetadataClientIp] = r.RemoteAddr()
@@ -73,12 +67,11 @@ func (this *access) None(r Proxy, req values.Metadata, isMaster bool) (p *sessio
 }
 
 // OAuth 账号登录
-func (this *access) OAuth(r Proxy, req values.Metadata, needMaster bool) (p *session.Data, err error) {
+func (this *access) OAuth(r Request, req values.Metadata, needMaster bool) (p *session.Data, err error) {
 	if p, err = this.oauth(r, req); err != nil {
 		return nil, err
 	}
-	if f, ok := r.(accessSocket); ok {
-		sock := f.Socket()
+	if sock := r.Socket(); sock != nil {
 		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
 	}
 	req[gwcfg.ServiceMetadataGUID] = p.UUID()
@@ -94,7 +87,7 @@ func (this *access) OAuth(r Proxy, req values.Metadata, needMaster bool) (p *ses
 }
 
 // Player 必须选择角色
-func (this *access) Player(r Proxy, req values.Metadata, needDeveloper bool) (p *session.Data, err error) {
+func (this *access) Player(r Request, req values.Metadata, needDeveloper bool) (p *session.Data, err error) {
 	if p, err = this.oauth(r, req); err != nil {
 		return nil, err
 	}

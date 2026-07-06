@@ -1,12 +1,12 @@
 package gateway
 
 import (
-	"bytes"
 	"fmt"
 	"time"
 
 	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc/selector"
+	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -22,6 +22,15 @@ import (
 // 当请求处理时间超过此值时，会记录告警日志
 var ElapsedMillisecond = 500 * time.Millisecond
 
+// Request 内部转发时使用：在 context.Context（统一请求上下文）之上附加登录态内部操作，
+// 仅 proxyRequest/access 使用；业务层只接触 context.Context。
+type Request interface {
+	context.Context
+	login(guid string, value values.Values) (string, error) //通过业务服激活登录信息（gateway 内部）
+	logout() error                                          //退出登录（gateway 内部）
+	verify() (*session.Data, error)                         //验证登录信息（gateway 内部）
+}
+
 // proxy 代理转发函数
 // 用于处理所有协议的请求转发，包括HTTP、TCP和WebSocket
 // 参数:
@@ -30,7 +39,7 @@ var ElapsedMillisecond = 500 * time.Millisecond
 // 返回值:
 //   - reply: 服务返回的数据
 //   - err: 处理过程中的错误
-func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
+func proxyRequest(proxy Request, path string) (reply []byte, err error) {
 	// 异常捕获和错误处理
 	defer func() {
 		if e := recover(); e != nil {
@@ -47,7 +56,7 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	var servicePath, serviceMethod string
 
 	// 路由解析：将请求路径映射到具体的服务和方法
-	servicePath, serviceMethod, err = Setting.Router(path, req)
+	servicePath, serviceMethod, err = Setting.Handler.Router(path, req)
 	if err != nil {
 		return nil, err
 	}
@@ -66,20 +75,14 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 		}
 	}
 
-	// 获取请求体
-	var buff *bytes.Buffer
-	if buff, err = proxy.Buffer(); err != nil {
+	// 处理请求：转发前预处理（默认 Default.Request 原样返回）；写入路由 path 供业务钩子判断(如 G2SOAuth)
+	proxy.Path(path)
+	if err = Setting.Handler.Request(proxy); err != nil {
 		return nil, err
 	}
-
-	// 处理请求：可以在这里对请求进行预处理
-	body := buff.Bytes()
-	if Setting.Request != nil {
-		flag := proxy.Flag()
-		ctx := NewContextWithProxy(path, &flag, req, proxy)
-		if body, err = Setting.Request(ctx, body); err != nil {
-			return nil, err
-		}
+	var body []byte
+	if body, err = proxy.Buffer(); err != nil {
+		return nil, err
 	}
 	// 性能监控：记录高延时请求
 	startTime := time.Now()
@@ -109,7 +112,7 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	// 创建登录信息：如果响应中包含登录标志，则执行登录操作
 	if guid, ok := res[gwcfg.ServicePlayerLogin]; ok {
 		var token string
-		if token, err = proxy.Login(guid, gwcfg.Cookies.Filter(res)); err != nil {
+		if token, err = proxy.login(guid, gwcfg.Cookies.Filter(res)); err != nil {
 			return nil, err
 		}
 		p = proxy.Session()
@@ -117,7 +120,7 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	}
 	// 退出登录：如果响应中包含退出登录标志，则执行退出登录操作
 	if _, ok := res[gwcfg.ServicePlayerLogout]; ok {
-		if err = proxy.Logout(); err != nil {
+		if err = proxy.logout(); err != nil {
 			return nil, err
 		} else if p != nil {
 			players.Delete(p)
@@ -129,15 +132,13 @@ func proxyRequest(proxy Proxy, path string) (reply []byte, err error) {
 	if p != nil {
 		CookiesUpdate(res, p)
 	}
-	// 可以在这里对响应进行后处理
-	if Setting.Response != nil {
-		var flag = message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
-		flag.Set(message.FlagConfirm)
-		ctx := NewContextWithProxy(path, &flag, res, proxy)
-		reply, err = Setting.Response(ctx, reply)
-		if err != nil {
-			return nil, err
-		}
+	// 响应后处理（默认 Default.Response 原样返回）；meta 为响应元数据 res
+	resFlag := message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
+	resFlag.Set(message.FlagConfirm)
+	resCtx := newSocketContext(proxy.Socket(), proxy.Session(), path, reply, resFlag, res)
+
+	if err = Setting.Handler.Response(resCtx); err != nil {
+		return nil, err
 	}
-	return reply, nil
+	return resCtx.Buffer()
 }

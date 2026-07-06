@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/hwcer/cosgo/binder"
@@ -83,7 +82,7 @@ func (this *TcpServer) init() error {
 //   - []byte: 序列化后的数据
 //   - error: 序列化过程中的错误
 func (this *TcpServer) serialize(c *cosnet.Context, reply any) ([]byte, error) {
-	return Setting.Serialize(c, reply)
+	return Setting.Handler.Serialize(c, reply)
 }
 
 // Listen 监听TCP端口
@@ -138,7 +137,7 @@ func (this *TcpServer) C2SHeartbeat(c *cosnet.Context) any {
 // 返回值:
 //   - any: 认证结果
 func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
-	args := Setting.C2SOAuthArgs()
+	args := Setting.Handler.C2SOAuthArgs()
 	if err := c.Bind(args); err != nil {
 		return err
 	}
@@ -148,34 +147,24 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 		return err
 	}
 	// 创建 socket 代理并登录
-	ctx := SocketContext{Context: c}
+	ctx := SocketRequest{Context: c}
 	vs := values.Values{}
 	if data.Developer {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, 1)
 	} else {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, 0)
 	}
-	if _, err = ctx.Login(data.Openid, vs); err != nil {
+	if _, err = ctx.login(data.Openid, vs); err != nil {
 		return err
 	}
 
 	if Setting.G2SOAuth == "" {
 		return nil
 	}
-	attr := data.Attach
-	if attr == nil {
-		attr = values.Values{}
-	}
-	if v := args.GetValues(); v != nil {
-		attr.Merge(v, true)
-	}
-	if ctx.body, err = binder.Json.Marshal(attr); err != nil {
+	ctx.body = []byte{} //oauth 路径显式置空，业务层未设置时也不回退到客户端凭据报文
+	if err = args.GetValues(data, &ctx); err != nil {
 		return err
 	}
-	if ctx.header == nil {
-		ctx.header = make(map[string]string)
-	}
-	ctx.header[binder.HeaderContentType] = "application/json"
 	var reply []byte
 	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
 		return err
@@ -183,8 +172,7 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	return reply
 }
 
-// S2CSecret 发送断线重连密钥
-// 默认的发送断线重连密钥
+// S2CSecret 登录成功后下发秘钥（转交 Setting.Handler，默认 Default 以 JSON 下发）
 // 参数:
 //   - sock: cosnet socket
 //   - _: 事件数据（未使用）
@@ -199,20 +187,10 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 		sock.Errorf(err)
 		return
 	}
-	if Setting.S2CSecret == nil {
-		return //不需要秘钥
-	}
-	if S2CSecretHandle, ok := Setting.S2CSecret.(S2CSecret); ok {
-		S2CSecretHandle.S2CSecret(sock, ts)
-	} else if S2CSecretString, ok := Setting.S2CSecret.(string); ok {
-		_ = sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, S2CSecretString, ts)
-	} else {
-		logger.Alert("gateway Setting.S2CSecret not support")
-	}
+	Setting.Handler.S2CSecret(sock, ts)
 }
 
-// S2CReplaced 顶号提示
-// 默认的顶号提示
+// S2CReplaced 被顶号时下发提示（转交 Setting.Handler，默认 Default 以 JSON 下发）
 // 参数:
 //   - sock: cosnet socket
 //   - i: 事件数据，包含顶号 IP
@@ -224,17 +202,7 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if !ok {
 		return
 	}
-
-	if Setting.S2CReplaced == nil {
-		return //不需要通知
-	}
-	if S2CReplacedHandle, ok := Setting.S2CReplaced.(S2CReplaced); ok {
-		S2CReplacedHandle.S2CReplaced(sock, ip)
-	} else if S2CReplacedString, ok := Setting.S2CReplaced.(string); ok {
-		_ = sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, S2CReplacedString, ip)
-	} else {
-		logger.Alert("gateway Setting.S2CReplaced not support")
-	}
+	Setting.Handler.S2CReplaced(sock, ip)
 }
 
 // C2SReconnect 处理重连请求
@@ -275,7 +243,7 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 	if err != nil {
 		return err
 	}
-	ctx := SocketContext{Context: c}
+	ctx := SocketRequest{Context: c}
 	reply, err := proxyRequest(&ctx, path)
 	if err != nil {
 		return err
@@ -283,19 +251,22 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 	return reply
 }
 
-// SocketContext socket代理结构体
+// SocketRequest socket代理结构体
 // 实现 gwcfg.Context 接口，用于TCP请求的代理
-type SocketContext struct {
+type SocketRequest struct {
 	*cosnet.Context
-	body   []byte
-	header map[string]string
+	body     []byte
+	header   map[string]string
+	metadata values.Metadata
+	flag     *message.Flag //override，nil 时读底层消息的 flag
+	path     string
 }
 
-// Verify 验证会话
+// verify 验证会话（gateway 内部）
 // 返回值:
 //   - *session.Data: 会话数据
 //   - error: 验证过程中的错误
-func (this *SocketContext) Verify() (*session.Data, error) {
+func (this *SocketRequest) verify() (*session.Data, error) {
 	data := this.Context.Socket.Data()
 	if data == nil {
 		return nil, session.ErrorSessionNotExist
@@ -303,7 +274,7 @@ func (this *SocketContext) Verify() (*session.Data, error) {
 	return data, nil
 }
 
-// Login 登录
+// login 登录（gateway 内部）
 // 参数:
 //   - guid: 用户GUID
 //   - value: 登录值
@@ -311,7 +282,7 @@ func (this *SocketContext) Verify() (*session.Data, error) {
 // 返回值:
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
-func (this *SocketContext) Login(guid string, value values.Values) (token string, err error) {
+func (this *SocketRequest) login(guid string, value values.Values) (token string, err error) {
 	data := this.Context.Socket.Data()
 	if data != nil {
 		if data.UUID() != guid {
@@ -324,24 +295,31 @@ func (this *SocketContext) Login(guid string, value values.Values) (token string
 	return ss.Token()
 }
 
-// Logout 登出
+// logout 登出（gateway 内部）
 // 返回值:
 //   - error: 登出过程中的错误
-func (this *SocketContext) Logout() error {
+func (this *SocketRequest) logout() error {
 	this.Context.Socket.Close()
 	return nil
 }
-func (this *SocketContext) Flag() message.Flag {
+func (this *SocketRequest) Flag(set ...message.Flag) message.Flag {
+	if len(set) > 0 {
+		f := set[0]
+		this.flag = &f
+	}
+	if this.flag != nil {
+		return *this.flag
+	}
 	return this.Context.Message.Flag()
 }
-func (this *SocketContext) Session() *session.Data {
+func (this *SocketRequest) Session() *session.Data {
 	return this.Context.Socket.Data()
 }
 
 // Socket 获取socket
 // 返回值:
 //   - *cosnet.Socket: cosnet socket
-func (this *SocketContext) Socket() *cosnet.Socket {
+func (this *SocketRequest) Socket() *cosnet.Socket {
 	return this.Context.Socket
 }
 
@@ -349,14 +327,39 @@ func (this *SocketContext) Socket() *cosnet.Socket {
 // 返回值:
 //   - *bytes.Buffer: 请求体缓冲区
 //   - error: 获取过程中的错误
-func (this *SocketContext) Buffer() (buf *bytes.Buffer, err error) {
+func (this *SocketRequest) GetBuffer() (buf *bytes.Buffer, err error) {
 	if this.body != nil {
 		return bytes.NewBuffer(this.body), nil
 	}
 	buff := bytes.NewBuffer(this.Context.Message.Body())
 	return buff, nil
 }
-func (this *SocketContext) Header() map[string]string {
+
+// Buffer 无参取值(默认读消息体)；传参设置透传请求体
+func (this *SocketRequest) Buffer(set ...[]byte) ([]byte, error) {
+	if len(set) > 0 {
+		this.body = set[0]
+	}
+	buf, err := this.GetBuffer()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// SetHeader 业务层设置透传请求头，如 Content-Type
+func (this *SocketRequest) SetHeader(key, value string) {
+	if this.header == nil {
+		this.header = make(map[string]string)
+	}
+	this.header[key] = value
+}
+
+// GetHeader 读取请求头
+func (this *SocketRequest) GetHeader(key string) string {
+	return this.Header()[key]
+}
+func (this *SocketRequest) Header() map[string]string {
 	// 设置 Content-Type
 	r := make(map[string]string)
 	magic := this.Message.Magic()
@@ -375,7 +378,10 @@ func (this *SocketContext) Header() map[string]string {
 // Metadata 获取请求元数据
 // 返回值:
 //   - values.Metadata: 请求元数据
-func (this *SocketContext) Metadata() values.Metadata {
+func (this *SocketRequest) Metadata() values.Metadata {
+	if this.metadata != nil {
+		return this.metadata
+	}
 	meta := values.Metadata{}
 	if _, q, _ := this.Context.Path(); q != "" {
 		query, _ := url.ParseQuery(q)
@@ -391,16 +397,34 @@ func (this *SocketContext) Metadata() values.Metadata {
 	}
 
 	meta[gwcfg.ServiceMetadataRequestId] = fmt.Sprintf("%d", this.Context.Message.Index())
+	this.metadata = meta
 	return meta
 }
 
 // RemoteAddr 获取远程地址
 // 返回值:
 //   - string: 远程地址
-func (this *SocketContext) RemoteAddr() string {
-	ip := this.Context.RemoteAddr().String()
-	if i := strings.Index(ip, ":"); i > 0 {
-		ip = ip[0:i]
+func (this *SocketRequest) RemoteAddr() string {
+	return stripPort(this.Context.RemoteAddr().String())
+}
+
+// Path 无参取值(默认消息路径)；传参设置路由 path（遮蔽内嵌 cosnet.Context 的三值 Path）
+func (this *SocketRequest) Path(set ...string) string {
+	if len(set) > 0 {
+		this.path = set[0]
 	}
-	return ip
+	if this.path == "" {
+		this.path, _, _ = this.Context.Path()
+	}
+	return this.path
+}
+
+// SetMetadata 设置转发元数据
+func (this *SocketRequest) SetMetadata(name, value string) {
+	this.Metadata()[name] = value
+}
+
+// GetMetadata 读取转发元数据
+func (this *SocketRequest) GetMetadata(key string) string {
+	return this.Metadata().GetString(key)
 }

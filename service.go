@@ -54,16 +54,13 @@ func write(c *cosrpc.Context) any {
 	mate := values.Metadata(c.Metadata())
 	var flag = message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	body := c.Bytes()
-	if Setting.Response != nil {
-		ctx := NewContextWithSocket(path, &flag, mate, sock)
-		body, err = Setting.Response(ctx, body)
-	}
-
-	if err != nil {
+	ctx := newSocketContext(sock, nil, path, body, flag, mate)
+	if err = Setting.Handler.Response(ctx); err != nil {
 		return err
 	}
 	rid := mate.GetInt32(gwcfg.ServiceMetadataRequestId)
-	_ = sock.Send(flag, rid, path, body)
+	body, _ = ctx.Buffer()
+	_ = sock.Send(ctx.Flag(), rid, path, body)
 	return nil
 }
 
@@ -104,21 +101,24 @@ func send(c *cosrpc.Context) any {
 	var err error
 	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	body := c.Bytes()
-	if Setting.Response != nil {
-		ctx := NewContextWithSocket(path, &flag, mate, sock)
-		body, err = Setting.Response(ctx, body)
-	}
-	if err != nil {
+	ctx := newSocketContext(sock, nil, path, body, flag, mate)
+	if err = Setting.Handler.Response(ctx); err != nil {
 		return err
 	}
 	rid := mate.GetInt32(gwcfg.ServiceMetadataRequestId)
 	//logger.Debug("推送消息  GUID:%s RID:%d PATH:%s", guid, rid, path)
-	_ = sock.Send(flag, rid, path, body)
+	body, _ = ctx.Buffer()
+	_ = sock.Send(ctx.Flag(), rid, path, body)
 	return nil
 }
 
 // broadcast 全服广播
 func broadcast(c *cosrpc.Context) any {
+	defer func() {
+		if e := recover(); e != nil {
+			logger.Alert("broadcast panic: %v", e)
+		}
+	}()
 	path := c.GetMetadata(gwcfg.ServiceMessagePath)
 	//logger.Debug("广播消息:%v", path)
 
@@ -137,13 +137,11 @@ func broadcast(c *cosrpc.Context) any {
 
 	var err error
 	body := c.Bytes()
-	if Setting.Response != nil {
-		ctx := NewContextWithSocket(path, &flag, mate, nil)
-		body, err = Setting.Response(ctx, body)
-	}
-	if err != nil {
+	ctx := newSocketContext(nil, nil, path, body, flag, mate)
+	if err = Setting.Handler.Response(ctx); err != nil {
 		return err
 	}
+	body, _ = ctx.Buffer()
 
 	players.Range(func(p *session.Data) bool {
 		uid := p.GetString(gwcfg.ServiceMetadataUID)
@@ -153,7 +151,7 @@ func broadcast(c *cosrpc.Context) any {
 		//CookiesUpdate(mate, p)
 		//Emitter.emit(EventTypeBroadcast, p, path, nil)
 		if sock := players.Socket(p); sock != nil {
-			_ = sock.Send(flag, 0, path, body, false)
+			_ = sock.Send(ctx.Flag(), 0, path, body, false)
 		}
 		return true
 	})

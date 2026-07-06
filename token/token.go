@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hwcer/cosgo/values"
+	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/errors"
 	"github.com/hwcer/gateway/gwcfg"
 
@@ -18,11 +19,11 @@ type Args interface {
 	GetGuid() string
 	GetAccess() string
 	GetSecret() string
-	GetValues() values.Values //透传给服务器
+	GetValues(*Result, context.Context) error //由业务层直接向 context.Context 写入透传给后端服务的 body/header
 }
 
 var NewArgs = func() Args {
-	return &ArgsDefault{}
+	return &Default{}
 }
 
 // Result 默认的 认证方式
@@ -34,23 +35,23 @@ type Result struct {
 	Developer bool          `json:"developer"`
 }
 
-type ArgsDefault struct {
+type Default struct {
 	Guid   string `json:"guid"`
 	Access string `json:"access"`
 	Secret string `json:"secret"`
 }
 
-func (t *ArgsDefault) GetGuid() string {
+func (t *Default) GetGuid() string {
 	return t.Guid
 }
-func (t *ArgsDefault) GetAccess() string {
+func (t *Default) GetAccess() string {
 	return t.Access
 }
-func (t *ArgsDefault) GetSecret() string {
+func (t *Default) GetSecret() string {
 	return t.Secret
 }
-func (t *ArgsDefault) GetValues() values.Values {
-	return nil
+func (t *Default) GetValues(*Result, context.Context) error {
+	return nil //默认不透传任何参数，由业务层的 Args 实现按需设置
 }
 
 func Verify(args Args) (r *Result, err error) {

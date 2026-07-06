@@ -72,7 +72,7 @@ func (this *Module) Init() (err error) {
 	//将 G2SOAuth 设置为 必须登录
 	if Setting.G2SOAuth != "" {
 		var ServicePath, ServiceMethod string
-		if ServicePath, ServiceMethod, err = Setting.Router(Setting.G2SOAuth, values.Metadata{}); err != nil {
+		if ServicePath, ServiceMethod, err = Setting.Handler.Router(Setting.G2SOAuth, values.Metadata{}); err != nil {
 			return err
 		}
 		gwcfg.Authorize.Set(ServicePath, ServiceMethod, gwcfg.OAuthTypeOAuth)

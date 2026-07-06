@@ -47,53 +47,52 @@ GM 快速登录：`{guid:"test", secret:"开发者密钥"}`
 
 ## Setting 全局配置
 
-通过 `gateway.Setting` 结构体配置网关行为，以下为关键字段：
+`gateway.Setting` 分为**配置字段**（路由字符串）和 **`Handler` 行为接口**：
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `C2SOAuth` | `string` | `"oauth"` | 客户端登录路由，置空禁用默认认证 |
 | `G2SOAuth` | `string` | `""` | 登录成功后转发至游戏服的路由，置空跳过 |
-| `S2CSecret` | `any` | `"S2CSecret"` | 登录成功后下发断线重连密钥 |
-| `S2CReplaced` | `any` | `"S2CReplaced"` | 被顶号时通知旧连接 |
 | `C2SHeartbeat` | `string` | `"C2SHeartbeat"` | 心跳包路由 |
 | `C2SReconnect` | `string` | `"C2SReconnect"` | 断线重连路由 |
-| `Serialize` | `func` | `defaultSerialize` | 响应序列化方式 |
-| `Request` | `func` | `nil` | 转发前对请求数据解密/处理 |
-| `Response` | `func` | `nil` | RPC 返回数据后处理 |
+| `Handler` | `Handler` | `Default{}` | 网关行为实现（路由/序列化/请求响应钩子/秘钥下发等） |
+
+### Handler 行为接口
+
+```go
+type Handler interface {
+    Router(path string, req values.Metadata) (servicePath, serviceMethod string, err error)
+    Request(c context.Context) error                    // 转发前预处理(如解密)，body 走 c.Buffer()
+    Response(c context.Context) error                   // 返回/推送后处理
+    Serialize(accept Accept, reply any) ([]byte, error) // 响应序列化
+    S2CSecret(sock *cosnet.Socket, secret string)       // 登录成功下发秘钥
+    S2CReplaced(sock *cosnet.Socket, ip string)         // 顶号下发提示
+    C2SOAuthArgs() token.Args                            // 解析 C2SOAuth 参数
+}
+```
+
+框架提供默认实现 `gateway.Default`。业务层**嵌入 `Default`**，只覆盖需要改变的方法，再赋给 `Setting.Handler`：
+
+```go
+type myHandler struct {
+    gateway.Default
+}
+func (myHandler) Router(path string, req values.Metadata) (string, string, error) { /* ... */ }
+func (myHandler) Serialize(accept gateway.Accept, reply any) ([]byte, error)       { /* ... */ }
+
+gateway.Setting.Handler = myHandler{}
+```
 
 ### S2CSecret / S2CReplaced
 
-这两个字段支持三种配置方式：
-
-| 值 | 行为 |
-|----|------|
-| `nil` | 不处理，不发送任何消息 |
-| `string`（路径） | 使用 `MagicNumberPathJson`（0xf0）模式发送，路径作为消息 path，数据为 JSON 字符串 |
-| 接口实现 | 自定义处理：实现 `S2CSecret` 或 `S2CReplaced` 接口 |
-
-默认值为字符串 `"S2CSecret"` / `"S2CReplaced"`，即默认以 **MagicNumberPathJson** 模式发送。
+默认实现以 **MagicNumberPathJson**（0xf0）模式下发，path 分别为 `"S2CSecret"` / `"S2CReplaced"`：
 
 ```go
-// 默认行为等价于：
 sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, "S2CSecret", tokenString)
 sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, "S2CReplaced", remoteIP)
 ```
 
-自定义接口示例：
-
-```go
-type S2CSecret interface {
-    S2CSecret(sock *cosnet.Socket, secret string)
-}
-type S2CReplaced interface {
-    S2CReplaced(sock *cosnet.Socket, ip string)
-}
-
-// 使用自定义实现
-gateway.Setting.S2CSecret = &mySecretHandler{}
-// 或禁用
-gateway.Setting.S2CSecret = nil
-```
+如需自定义或禁用，在业务 Handler 中覆盖对应方法（禁用即写成空实现）。
 
 ## 消息推送
 

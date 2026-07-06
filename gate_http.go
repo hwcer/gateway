@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hwcer/cosgo"
+	"github.com/hwcer/cosnet"
 	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/coswss"
@@ -112,7 +113,7 @@ func (this *HttpServer) wss() error {
 //   - []byte: 序列化后的数据
 //   - error: 序列化过程中的错误
 func (this *HttpServer) serialize(c *cosweb.Context, reply any) ([]byte, error) {
-	return Setting.Serialize(c, reply)
+	return Setting.Handler.Serialize(c, reply)
 }
 
 // Listen 监听HTTP端口
@@ -158,7 +159,7 @@ func (this *HttpServer) Accept(ln net.Listener) (err error) {
 // 返回值:
 //   - any: 认证结果，包含会话密钥
 func (this *HttpServer) oauth(c *cosweb.Context) any {
-	args := Setting.C2SOAuthArgs()
+	args := Setting.Handler.C2SOAuthArgs()
 	if err := c.Bind(args); err != nil {
 		return err
 	}
@@ -168,7 +169,7 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 		return err
 	}
 	// 创建 http 代理并登录
-	ctx := HttpContent{Context: c}
+	ctx := HttpRequest{Context: c}
 	vs := values.Values{}
 	if data.Developer {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, 1)
@@ -179,28 +180,17 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	// 构建响应
 	cookie := map[string]string{}
 	cookie["key"] = session.Options.Name
-	if cookie["val"], err = ctx.Login(data.Openid, vs); err != nil {
+	if cookie["val"], err = ctx.login(data.Openid, vs); err != nil {
 		return err
 	}
 	if Setting.G2SOAuth == "" {
 		return cookie
 	}
 
-	attr := data.Attach
-	if attr == nil {
-		attr = values.Values{}
-	}
-	if v := args.GetValues(); v != nil {
-		attr.Merge(v, true)
-	}
-	if ctx.body, err = binder.Json.Marshal(attr); err != nil {
+	ctx.body = []byte{} //oauth 路径显式置空，业务层未设置时也不回退到客户端凭据报文
+	if err = args.GetValues(data, &ctx); err != nil {
 		return err
 	}
-
-	if ctx.header == nil {
-		ctx.header = make(map[string]string)
-	}
-	ctx.header[binder.HeaderContentType] = "application/json"
 
 	var reply []byte
 	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
@@ -220,7 +210,7 @@ func (this *HttpServer) C2SHeartbeat(c *cosweb.Context) any {
 //   - any: 代理结果
 func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 	// 创建 http 代理并处理请求
-	ctx := HttpContent{Context: c}
+	ctx := HttpRequest{Context: c}
 	reply, err := proxyRequest(&ctx, c.Request.URL.Path)
 	if err != nil {
 		return err
@@ -228,16 +218,18 @@ func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 	return reply
 }
 
-// HttpContent HTTP代理结构体
+// HttpRequest HTTP代理结构体
 // 实现gwcfg.Context接口，用于HTTP请求的代理
-type HttpContent struct {
+type HttpRequest struct {
 	*cosweb.Context
 	body     []byte
 	header   map[string]string
 	metadata values.Metadata
+	flag     message.Flag
+	path     string
 }
 
-// Login 登录
+// login 登录（gateway 内部）
 // 参数:
 //   - guid: 用户GUID
 //   - value: 登录值
@@ -245,7 +237,7 @@ type HttpContent struct {
 // 返回值:
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
-func (this *HttpContent) Login(guid string, value values.Values) (token string, err error) {
+func (this *HttpRequest) login(guid string, value values.Values) (token string, err error) {
 	var data *session.Data
 	token, data, err = players.Login(guid, value)
 	if err != nil {
@@ -267,18 +259,18 @@ func (this *HttpContent) Login(guid string, value values.Values) (token string, 
 	return
 }
 
-// Logout 登出
+// logout 登出（gateway 内部）
 // 返回值:
 //   - error: 登出过程中的错误
-func (this *HttpContent) Logout() error {
+func (this *HttpRequest) logout() error {
 	return this.Context.Session.Delete()
 }
 
-// Verify 验证会话
+// verify 验证会话（gateway 内部）
 // 返回值:
 //   - *session.Data: 会话数据
 //   - error: 验证过程中的错误
-func (this *HttpContent) Verify() (*session.Data, error) {
+func (this *HttpRequest) verify() (*session.Data, error) {
 	// 如果会话已存在且有效，直接返回
 	if this.Context.Session != nil && this.Context.Session.Data != nil {
 		return this.Context.Session.Data, nil
@@ -294,14 +286,39 @@ func (this *HttpContent) Verify() (*session.Data, error) {
 	return this.Context.Session.Data, nil
 }
 
-func (this *HttpContent) Buffer() (buf *bytes.Buffer, err error) {
-	if this.body == nil {
+func (this *HttpRequest) GetBuffer() (buf *bytes.Buffer, err error) {
+	if this.body != nil {
 		return bytes.NewBuffer(this.body), nil
 	}
 	return this.Context.Buffer()
 }
 
-func (this *HttpContent) Header() map[string]string {
+// Buffer 无参取值(默认读请求体)；传参设置透传请求体（遮蔽内嵌 cosweb.Context.Buffer）
+func (this *HttpRequest) Buffer(set ...[]byte) ([]byte, error) {
+	if len(set) > 0 {
+		this.body = set[0]
+	}
+	buf, err := this.GetBuffer()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// SetHeader 业务层设置透传请求头，如 Content-Type
+func (this *HttpRequest) SetHeader(key, value string) {
+	if this.header == nil {
+		this.header = make(map[string]string)
+	}
+	this.header[key] = value
+}
+
+// GetHeader 读取请求头
+func (this *HttpRequest) GetHeader(key string) string {
+	return this.Header()[key]
+}
+
+func (this *HttpRequest) Header() map[string]string {
 	// 设置 Content-Type
 	r := make(map[string]string)
 	header := this.Context.Header()
@@ -329,7 +346,7 @@ func (this *HttpContent) Header() map[string]string {
 	}
 	return r
 }
-func (this *HttpContent) Session() *session.Data {
+func (this *HttpRequest) Session() *session.Data {
 	if ss := this.Context.Session; ss != nil {
 		return ss.Data
 	}
@@ -339,7 +356,7 @@ func (this *HttpContent) Session() *session.Data {
 // Metadata 获取请求元数据
 // 返回值:
 //   - values.Metadata: 请求元数据
-func (this *HttpContent) Metadata() values.Metadata {
+func (this *HttpRequest) Metadata() values.Metadata {
 	if this.metadata != nil {
 		return this.metadata
 	}
@@ -361,15 +378,48 @@ func (this *HttpContent) Metadata() values.Metadata {
 // RemoteAddr 获取远程地址
 // 返回值:
 //   - string: 远程地址
-func (this *HttpContent) RemoteAddr() string {
-	ip := this.Context.RemoteAddr()
-	if i := strings.Index(ip, ":"); i > 0 {
-		ip = ip[0:i]
-	}
-	return ip
+func (this *HttpRequest) RemoteAddr() string {
+	return stripPort(this.Context.RemoteAddr())
 }
-func (this *HttpContent) Flag() message.Flag {
-	return 0
+
+// stripPort 去掉 host:port 中的端口，IPv4/IPv6 通用；无端口时原样返回
+func stripPort(addr string) string {
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
+}
+
+// Path 无参取值(默认 URL 路径)；传参设置路由 path
+func (this *HttpRequest) Path(set ...string) string {
+	if len(set) > 0 {
+		this.path = set[0]
+	}
+	if this.path == "" {
+		this.path = this.Context.Request.URL.Path
+	}
+	return this.path
+}
+
+// Socket HTTP 无长连接，返回 nil
+func (this *HttpRequest) Socket() *cosnet.Socket {
+	return nil
+}
+
+// SetMetadata 设置转发元数据
+func (this *HttpRequest) SetMetadata(name, value string) {
+	this.Metadata()[name] = value
+}
+
+// GetMetadata 读取转发元数据
+func (this *HttpRequest) GetMetadata(key string) string {
+	return this.Metadata().GetString(key)
+}
+func (this *HttpRequest) Flag(set ...message.Flag) message.Flag {
+	if len(set) > 0 {
+		this.flag = set[0]
+	}
+	return this.flag
 }
 
 // getContentType 获取内容类型
@@ -380,7 +430,7 @@ func (this *HttpContent) Flag() message.Flag {
 //
 // 返回值:
 //   - string: 内容类型
-func (this *HttpContent) getContentType(name string, split string) string {
+func (this *HttpRequest) getContentType(name string, split string) string {
 	t := this.Context.Request.Header.Get(name)
 	if t == "" {
 		return ""
