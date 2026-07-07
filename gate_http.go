@@ -158,7 +158,7 @@ func (this *HttpServer) Accept(ln net.Listener) (err error) {
 // 返回值:
 //   - any: 认证结果，包含会话密钥
 func (this *HttpServer) oauth(c *cosweb.Context) any {
-	args := Setting.Handler.C2SOAuthArgs()
+	args := Setting.Handler.Token()
 	if err := c.Bind(args); err != nil {
 		return err
 	}

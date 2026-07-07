@@ -57,13 +57,13 @@ const (
 
 // Handler 网关行为接口。业务层可嵌入 Default 只覆盖需要改变的方法。
 type Handler interface {
+	Token() token.Token                                                                     //登录（C2SOAuth）Token
 	Router(path string, req values.Metadata) (servicePath, serviceMethod string, err error) //路由处理规则
 	Request(c context.Context) error                                                        //转发前预处理(如解密)，默认原样返回
 	Response(c context.Context) error                                                       //返回/推送后处理，默认原样返回
 	Serialize(accept Accept, reply any) ([]byte, error)                                     //响应序列化
 	S2CSecret(sock *cosnet.Socket, secret string)                                           //登录成功给客户端下发秘钥
 	S2CReplaced(sock *cosnet.Socket, ip string)                                             //被顶号时给客户端下发提示
-	C2SOAuthArgs() token.Args                                                               //解析 C2SOAuth 参数
 }
 
 var Setting = struct {
@@ -81,6 +81,11 @@ var Setting = struct {
 
 // Default 网关行为默认实现。业务层嵌入它，只覆盖需要改变的方法。
 type Default struct{}
+
+// Token 默认 C2SOAuth 参数解析
+func (Default) Token() token.Token {
+	return &token.Default{}
+}
 
 // Router 默认路由：/servicePath/serviceMethod
 func (Default) Router(path string, req values.Metadata) (servicePath, serviceMethod string, err error) {
@@ -120,9 +125,4 @@ func (Default) S2CSecret(sock *cosnet.Socket, secret string) {
 // S2CReplaced 默认用 MagicNumberPathJson 以 JSON 下发顶号提示
 func (Default) S2CReplaced(sock *cosnet.Socket, ip string) {
 	_ = sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, pathS2CReplaced, ip)
-}
-
-// C2SOAuthArgs 默认 C2SOAuth 参数解析
-func (Default) C2SOAuthArgs() token.Args {
-	return token.NewArgs()
 }

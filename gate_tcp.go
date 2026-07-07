@@ -144,7 +144,7 @@ func (this *TcpServer) C2SHeartbeat(c *cosnet.Context) any {
 // 返回值:
 //   - any: 认证结果
 func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
-	args := Setting.Handler.C2SOAuthArgs()
+	args := Setting.Handler.Token()
 	if err := c.Bind(args); err != nil {
 		return err
 	}

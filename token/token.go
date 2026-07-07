@@ -15,15 +15,11 @@ import (
 	"github.com/hwcer/cosgo/utils"
 )
 
-type Args interface {
+type Token interface {
 	GetGuid() string
 	GetAccess() string
 	GetSecret() string
 	GetValues(*Result, context.Context) error //由业务层直接向 context.Context 写入透传给后端服务的 body/header
-}
-
-var NewArgs = func() Args {
-	return &Default{}
 }
 
 // Result 默认的 认证方式
@@ -54,7 +50,7 @@ func (t *Default) GetValues(*Result, context.Context) error {
 	return nil //默认不透传任何参数，由业务层的 Args 实现按需设置
 }
 
-func Verify(args Args) (r *Result, err error) {
+func Verify(args Token) (r *Result, err error) {
 	r = &Result{}
 	//是否开启 GM
 	if secret := args.GetSecret(); secret != "" {
