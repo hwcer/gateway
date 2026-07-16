@@ -58,18 +58,10 @@ func (this *TcpServer) init() error {
 		_ = service.Register(this.C2SOAuth, Setting.C2SOAuth) // 注册认证服务
 	}
 	if Setting.C2SHeartbeat != "" {
-		f := this.C2SHeartbeat
-		if h, ok := Setting.Handler.(C2SHeartbeat); ok {
-			f = h.C2SHeartbeat //业务 Handler 实现则优先
-		}
-		_ = service.Register(f, Setting.C2SHeartbeat)
+		_ = service.Register(this.C2SHeartbeat, Setting.C2SHeartbeat)
 	}
 	if Setting.C2SReconnect != "" {
-		f := this.C2SReconnect
-		if h, ok := Setting.Handler.(C2SReconnect); ok {
-			f = h.C2SReconnect //业务 Handler 实现则优先
-		}
-		_ = service.Register(f, Setting.C2SReconnect)
+		_ = service.Register(this.C2SReconnect, Setting.C2SReconnect)
 	}
 
 	// 设置序列化器
@@ -133,6 +125,9 @@ func (this *TcpServer) Accept(ln net.Listener) error {
 // 返回值:
 //   - any: 当前时间戳（毫秒）
 func (this *TcpServer) C2SHeartbeat(c *cosnet.Context) any {
+	if h, ok := Setting.Handler.(C2SHeartbeat); ok {
+		return h.C2SHeartbeat(c)
+	}
 	ms := time.Now().UnixMilli()
 	return ms
 }
@@ -219,14 +214,18 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 // 返回值:
 //   - any: 重连结果
 func (this *TcpServer) C2SReconnect(c *cosnet.Context) any {
+	if h, ok := Setting.Handler.(C2SReconnect); ok {
+		return h.C2SReconnect(c) //业务 Handler 实现则优先
+	}
 	secret := string(c.Message.Body())
 	if secret == "" {
 		return values.Error("secret empty")
 	}
-	if _, err := players.Reconnect(c.Socket, secret); err != nil {
+	p, err := players.Reconnect(c.Socket, secret)
+	if err != nil {
 		return err
 	}
-	return true
+	return p.GetInt32(gwcfg.ServiceMetadataRequestId)
 }
 
 // Disconnect 处理断开连接事件
@@ -319,6 +318,10 @@ func (this *SocketRequest) Flag(set ...message.Flag) message.Flag {
 	}
 	return this.Context.Message.Flag()
 }
+func (this *SocketRequest) Index() int32 {
+	return this.Context.Message.Index()
+}
+
 func (this *SocketRequest) Session() *session.Data {
 	return this.Context.Socket.Data()
 }

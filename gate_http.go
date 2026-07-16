@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -283,6 +284,15 @@ func (this *HttpRequest) verify() (*session.Data, error) {
 		return nil, err
 	}
 	return this.Context.Session.Data, nil
+}
+
+func (this *HttpRequest) Index() int32 {
+	rid := this.GetMetadata(gwcfg.ServiceMetadataRequestId)
+	if rid == "" {
+		return 0
+	}
+	index, _ := strconv.ParseInt(rid, 10, 32)
+	return int32(index)
 }
 
 // Buffer 无参取值(默认读请求体)；传参设置透传请求体（遮蔽内嵌 cosweb.Context.Buffer）

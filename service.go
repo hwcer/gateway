@@ -54,7 +54,7 @@ func write(c *cosrpc.Context) any {
 	mate := values.Metadata(c.Metadata())
 	var flag = message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	body := c.Bytes()
-	ctx := newSocketContext(sock, nil, path, body, flag, mate)
+	ctx := newSocketContext(sock, nil, path, 0, body, flag, mate)
 	if err = Setting.Handler.Response(ctx); err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func send(c *cosrpc.Context) any {
 		logger.Debug("长链接不在线,消息丢弃,UID:%s GUID:%s PATH:%s ", uid, guid, path)
 		return nil
 	}
-	CookiesUpdate(mate, p)
+	CookiesUpdate(mate, p, 0)
 	if len(path) == 0 {
 		return nil //仅仅设置信息，不需要发送
 	}
@@ -101,7 +101,7 @@ func send(c *cosrpc.Context) any {
 	var err error
 	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	body := c.Bytes()
-	ctx := newSocketContext(sock, nil, path, body, flag, mate)
+	ctx := newSocketContext(sock, nil, path, 0, body, flag, mate)
 	if err = Setting.Handler.Response(ctx); err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func broadcast(c *cosrpc.Context) any {
 
 	var err error
 	body := c.Bytes()
-	ctx := newSocketContext(nil, nil, path, body, flag, mate)
+	ctx := newSocketContext(nil, nil, path, 0, body, flag, mate)
 	if err = Setting.Handler.Response(ctx); err != nil {
 		return err
 	}

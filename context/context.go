@@ -13,6 +13,7 @@ import (
 type Context interface {
 	Path(set ...string) string             //无参取值；传参设置(路由 path)
 	Flag(set ...message.Flag) message.Flag //无参取值；传参设置
+	Index() int32                          //包序号,request id
 	Buffer(set ...[]byte) ([]byte, error)  //数据包
 	Header() map[string]string             //HTTP 请求头,tcp/wss 只有 Accept,Content-Type
 	Accept() binder.Binder                 //响应序列化方式

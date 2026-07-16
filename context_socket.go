@@ -18,14 +18,15 @@ type socketContext struct {
 	body   []byte
 	flag   message.Flag
 	meta   values.Metadata
+	index  int32
 	header map[string]string
 }
 
-func newSocketContext(sock *cosnet.Socket, data *session.Data, path string, body []byte, flag message.Flag, meta values.Metadata) *socketContext {
+func newSocketContext(sock *cosnet.Socket, data *session.Data, path string, index int32, body []byte, flag message.Flag, meta values.Metadata) *socketContext {
 	if meta == nil {
 		meta = values.Metadata{}
 	}
-	return &socketContext{sock: sock, data: data, path: path, body: body, flag: flag, meta: meta}
+	return &socketContext{sock: sock, data: data, path: path, body: body, flag: flag, index: index, meta: meta}
 }
 
 func (this *socketContext) Path(set ...string) string {
@@ -39,6 +40,9 @@ func (this *socketContext) Flag(set ...message.Flag) message.Flag {
 		this.flag = set[0]
 	}
 	return this.flag
+}
+func (this *socketContext) Index() int32 {
+	return this.index
 }
 func (this *socketContext) Socket() *cosnet.Socket {
 	return this.sock

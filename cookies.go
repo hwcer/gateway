@@ -10,8 +10,11 @@ import (
 	"github.com/hwcer/cosgo/values"
 )
 
-func CookiesUpdate(cookie values.Metadata, p *session.Data) {
+func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32) {
 	vs := values.Values{}
+	if i > 0 {
+		vs[gwcfg.ServiceMetadataRequestId] = i
+	}
 	for k, v := range cookie {
 		if strings.HasPrefix(k, gwcfg.ServicePlayerChannelJoin) {
 			k = strings.TrimPrefix(k, gwcfg.ServicePlayerChannelJoin)
