@@ -44,7 +44,7 @@ type config struct {
 	Prefix    string   `json:"prefix"`    //路由强制前缀
 	Address   string   `json:"address"`   //连接地址
 	Capacity  int      `json:"capacity"`  //session默认分配大小，
-	Protocol  protocol `json:"protocol"`  //1-短链接，2-长连接，3-长短链接全开
+	Protocol  protocol `json:"protocol"`  //位掩码:1-WSS,2-TCP,4-HTTP,可组合(如7=全开)
 	Websocket string   `json:"websocket"` //开启websocket时,路由前缀
 	KeyFile   string   `json:"KeyFile"`   //HTTPS 证书KEY
 	CertFile  string   `json:"CertFile"`  //HTTPS 证书Cert

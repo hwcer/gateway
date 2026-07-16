@@ -49,15 +49,19 @@ func (auth *authorize) Set(servicePath, serviceMethod string, i OAuthType) {
 
 func (auth *authorize) Get(s ...string) (v OAuthType, path string) {
 	path = auth.Format(s...)
-	var ok bool
-	if v, ok = auth.dict[path]; ok {
-		return
+	if hit, ok := auth.dict[path]; ok {
+		return hit, path
 	}
-	var k string
-	for k, v = range auth.prefix {
-		if strings.HasPrefix(path, k) {
-			return
+	// 最长前缀匹配:多个前缀同时命中时取最具体的,避免 map 遍历顺序随机导致结果不确定
+	longest := -1
+	for k, pv := range auth.prefix {
+		if len(k) > longest && strings.HasPrefix(path, k) {
+			longest = len(k)
+			v = pv
 		}
+	}
+	if longest >= 0 {
+		return
 	}
 	v = auth.v
 	return
@@ -86,7 +90,7 @@ func (auth *authorize) SetMaster(servicePath string, serviceMethod string) {
 }
 
 func (auth *authorize) IsMaster(path string) bool {
-	for p, _ := range auth.developer {
+	for p := range auth.developer {
 		if strings.HasPrefix(path, p) {
 			return true
 		}

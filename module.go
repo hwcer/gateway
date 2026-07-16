@@ -121,9 +121,13 @@ func (this *Module) Start() (err error) {
 	// websocket
 	if p.Has(gwcfg.ProtocolTypeWSS) {
 		if p.Has(gwcfg.ProtocolTypeHTTP) {
-			err = HTTP.wss() //在COSWEB上启动WS
+			err = HTTP.wss() //在COSWEB上启动WS,与HTTP共用监听器
+		} else if this.mux != nil {
+			// cmux 已占用端口,WSS 必须走 mux 的 HTTP 匹配器,不能再自行绑定端口
+			so := this.mux.Match(cmux.HTTP1Fast())
+			err = coswss.Accept(TCP.Sockets, so, gwcfg.Options.Gate.Websocket)
 		} else {
-			// 使用coswss.New创建WebSocket服务器
+			// 独占端口:使用coswss.New创建WebSocket服务器
 			err = coswss.New(TCP.Sockets, gwcfg.Options.Gate.Address, gwcfg.Options.Gate.Websocket)
 		}
 		if err != nil {

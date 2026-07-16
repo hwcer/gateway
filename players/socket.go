@@ -38,7 +38,6 @@ func Replace(p *session.Data, sock *cosnet.Socket, ip string) {
 			sock.Authentication(p, reconnect)
 		}
 	})
-	return
 }
 
 func Connect(sock *cosnet.Socket, guid string, value values.Values) (data *session.Data, err error) {
@@ -48,8 +47,8 @@ func Connect(sock *cosnet.Socket, guid string, value values.Values) (data *sessi
 	return
 }
 func Reconnect(sock *cosnet.Socket, secret string) (data *session.Data, err error) {
-	if v := sock.Data(); v != nil {
-		return
+	if data = sock.Data(); data != nil {
+		return //已在线,直接返回现有会话,避免调用方对 nil 解引用
 	}
 	s := session.New()
 	if err = s.Verify(secret); err != nil {

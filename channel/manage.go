@@ -42,12 +42,17 @@ func Join(p *session.Data, name string, value string) {
 	if old, ok := setter.Join(name, value); ok && old != value {
 		leave(p, name, old)
 	}
-	room := loadOrCreate(name, value, false)
-	if room == nil {
-		logger.Error("channel Join failed: room creation error name:%s value:%s", name, value)
-		return
+	rk := Name(name, value)
+	// room.Join 返回 false 表示命中了正在销毁(released)的旧实例:
+	// 清掉该实例后重试,避免"加入"与"空房销毁"并发时玩家被静默丢弃
+	for i := 0; i < 8; i++ {
+		room := loadOrCreate(name, value, false)
+		if room.Join(p) {
+			return
+		}
+		manage.CompareAndDelete(rk, room)
 	}
-	room.Join(p)
+	logger.Error("channel Join failed after retries name:%s value:%s", name, value)
 }
 
 // Leave 将玩家从指定频道移除

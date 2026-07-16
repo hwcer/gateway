@@ -103,11 +103,6 @@ func proxyRequest(proxy Request, path string) (reply []byte, err error) {
 		return nil, err
 	}
 
-	// 如果响应元数据只有响应类型，则直接返回
-	if len(res) == 1 {
-		return reply, nil
-	}
-
 	// 处理登录和退出登录
 	// 创建登录信息：如果响应中包含登录标志，则执行登录操作
 	if guid, ok := res[gwcfg.ServicePlayerLogin]; ok {
@@ -128,15 +123,15 @@ func proxyRequest(proxy Request, path string) (reply []byte, err error) {
 		p = nil
 	}
 
+	index := proxy.Index()
 	// 更新用户会话的 cookies 信息
 	if p != nil {
-		CookiesUpdate(res, p)
+		CookiesUpdate(res, p, index)
 	}
 	// 响应后处理（默认 Default.Response 原样返回）；meta 为响应元数据 res
 	resFlag := message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
 	resFlag.Set(message.FlagConfirm)
-	resCtx := newSocketContext(proxy.Socket(), proxy.Session(), path, reply, resFlag, res)
-
+	resCtx := newSocketContext(proxy.Socket(), proxy.Session(), path, index, reply, resFlag, res)
 	if err = Setting.Handler.Response(resCtx); err != nil {
 		return nil, err
 	}

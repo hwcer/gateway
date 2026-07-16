@@ -43,12 +43,12 @@ func WSVerify(_ http.ResponseWriter, r *http.Request) (meta map[string]string, e
 	if token == "" {
 		return nil, nil
 	}
+	// 原则：连接时可以不认证，但一旦传了 token 就必须校验通过，失败即拒绝连接
 	ss := session.New()
-	meta = map[string]string{gwcfg.ServiceMetadataGUID: ss.Data.UUID()}
-	if err = ss.Verify(token); err == nil {
-		meta[gwcfg.ServiceMetadataGUID] = ss.Data.UUID()
+	if err = ss.Verify(token); err != nil {
+		return nil, err
 	}
-	return meta, nil
+	return map[string]string{gwcfg.ServiceMetadataGUID: ss.Data.UUID()}, nil
 }
 func WSAccept(sock *cosnet.Socket, meta map[string]string) {
 	if len(meta) == 0 {
