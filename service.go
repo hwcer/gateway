@@ -54,13 +54,16 @@ func write(c *cosrpc.Context) any {
 	mate := values.Metadata(c.Metadata())
 	var flag = message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	body := c.Bytes()
-	ctx := newSocketContext(sock, nil, path, 0, body, flag, mate)
-	if err = Setting.Handler.Response(ctx); err != nil {
-		return err
+	if h, ok := Setting.Handler.(Response); ok {
+		ctx := newSocketContext(sock, nil, path, 0, body, flag, mate)
+		if err = h.Response(ctx); err != nil {
+			return err
+		}
+		flag = ctx.Flag()
+		body, _ = ctx.Buffer()
 	}
 	rid := mate.GetInt32(gwcfg.ServiceMetadataRequestId)
-	body, _ = ctx.Buffer()
-	_ = sock.Send(ctx.Flag(), rid, path, body)
+	_ = sock.Send(flag, rid, path, body)
 	return nil
 }
 
@@ -101,14 +104,17 @@ func send(c *cosrpc.Context) any {
 	var err error
 	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	body := c.Bytes()
-	ctx := newSocketContext(sock, nil, path, 0, body, flag, mate)
-	if err = Setting.Handler.Response(ctx); err != nil {
-		return err
+	if h, ok := Setting.Handler.(Response); ok {
+		ctx := newSocketContext(sock, nil, path, 0, body, flag, mate)
+		if err = h.Response(ctx); err != nil {
+			return err
+		}
+		flag = ctx.Flag()
+		body, _ = ctx.Buffer()
 	}
 	rid := mate.GetInt32(gwcfg.ServiceMetadataRequestId)
 	//logger.Debug("推送消息  GUID:%s RID:%d PATH:%s", guid, rid, path)
-	body, _ = ctx.Buffer()
-	_ = sock.Send(ctx.Flag(), rid, path, body)
+	_ = sock.Send(flag, rid, path, body)
 	return nil
 }
 
@@ -137,11 +143,14 @@ func broadcast(c *cosrpc.Context) any {
 
 	var err error
 	body := c.Bytes()
-	ctx := newSocketContext(nil, nil, path, 0, body, flag, mate)
-	if err = Setting.Handler.Response(ctx); err != nil {
-		return err
+	if h, ok := Setting.Handler.(Response); ok {
+		ctx := newSocketContext(nil, nil, path, 0, body, flag, mate)
+		if err = h.Response(ctx); err != nil {
+			return err
+		}
+		flag = ctx.Flag()
+		body, _ = ctx.Buffer()
 	}
-	body, _ = ctx.Buffer()
 
 	players.Range(func(p *session.Data) bool {
 		uid := p.GetString(gwcfg.ServiceMetadataUID)
@@ -151,7 +160,7 @@ func broadcast(c *cosrpc.Context) any {
 		//CookiesUpdate(mate, p)
 		//Emitter.emit(EventTypeBroadcast, p, path, nil)
 		if sock := players.Socket(p); sock != nil {
-			_ = sock.Send(ctx.Flag(), 0, path, body, false)
+			_ = sock.Send(flag, 0, path, body, false)
 		}
 		return true
 	})

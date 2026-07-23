@@ -106,12 +106,11 @@ func proxyRequest(proxy Request, path string) (reply []byte, err error) {
 	// 处理登录和退出登录
 	// 创建登录信息：如果响应中包含登录标志，则执行登录操作
 	if guid, ok := res[gwcfg.ServicePlayerLogin]; ok {
-		var token string
-		if token, err = proxy.login(guid, gwcfg.Cookies.Filter(res)); err != nil {
+		//秘钥不再回写 res：业务层 Response 钩子可直接用 c.Session() 取当前会话
+		if _, err = proxy.login(guid, gwcfg.Cookies.Filter(res)); err != nil {
 			return nil, err
 		}
 		p = proxy.Session()
-		res[gwcfg.ServicePlayerCookie] = token
 	}
 	// 退出登录：如果响应中包含退出登录标志，则执行退出登录操作
 	if _, ok := res[gwcfg.ServicePlayerLogout]; ok {
@@ -128,12 +127,20 @@ func proxyRequest(proxy Request, path string) (reply []byte, err error) {
 	if p != nil {
 		CookiesUpdate(res, p, index)
 	}
-	// 响应后处理（默认 Default.Response 原样返回）；meta 为响应元数据 res
+	// 响应后处理：仅业务 Handler 实现 Response 时才构造响应上下文；meta 为响应元数据 res
+	h, ok := Setting.Handler.(Response)
+	if !ok {
+		return reply, nil
+	}
+	// FlagConfirm 供钩子分流用（确认包 / service.go 的推送 / 广播 FlagBroadcast），
+	// 不影响实际回包——代理路径的回包 flag 由 cosnet 的 Handler.reply 固定生成
 	resFlag := message.Flag(res.GetInt32(gwcfg.ServiceResponseFlag))
 	resFlag.Set(message.FlagConfirm)
 	resCtx := newSocketContext(proxy.Socket(), proxy.Session(), path, index, reply, resFlag, res)
-	if err = Setting.Handler.Response(resCtx); err != nil {
+	if err = h.Response(resCtx); err != nil {
 		return nil, err
 	}
+	//钩子改过的 flag 回写入站上下文，由 cosnet.Handler.reply 采纳（HTTP 无 flag，写入即空转）
+	proxy.Flag(resCtx.Flag())
 	return resCtx.Buffer()
 }

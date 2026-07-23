@@ -49,6 +49,12 @@ type C2SReconnect interface {
 	C2SReconnect(c *cosnet.Context) any
 }
 
+// Response 可选接口：业务 Handler 实现则在回包/推送前做后处理（如加密、改包、改 flag）。
+// 未实现时网关原样返回，且不再构造响应上下文（socketContext/resFlag）。
+type Response interface {
+	Response(c context.Context) error
+}
+
 // 顶号/秘钥下发的默认包名（Default 实现用 MagicNumberPathJson 以 JSON 直接下发）
 const (
 	pathS2CSecret   = "S2CSecret"
@@ -60,7 +66,6 @@ type Handler interface {
 	Token() token.Token                                                                     //登录（C2SOAuth）Token
 	Router(path string, req values.Metadata) (servicePath, serviceMethod string, err error) //路由处理规则
 	Request(c context.Context) error                                                        //转发前预处理(如解密)，默认原样返回
-	Response(c context.Context) error                                                       //返回/推送后处理，默认原样返回
 	Serialize(accept Accept, reply any) ([]byte, error)                                     //响应序列化
 	S2CSecret(sock *cosnet.Socket, secret string)                                           //登录成功给客户端下发秘钥
 	S2CReplaced(sock *cosnet.Socket, ip string)                                             //被顶号时给客户端下发提示
@@ -102,11 +107,6 @@ func (Default) Router(path string, req values.Metadata) (servicePath, serviceMet
 
 // Request 默认不处理，原样转发
 func (Default) Request(c context.Context) error {
-	return nil
-}
-
-// Response 默认不处理，原样返回
-func (Default) Response(c context.Context) error {
 	return nil
 }
 

@@ -186,7 +186,8 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	if Setting.G2SOAuth == "" {
 		return cookie
 	}
-
+	//将秘钥 传给 业务服务器由业务层决定要不要在确认包中返回给客户端
+	ctx.SetMetadata(gwcfg.ServicePlayerCookie, cookie["val"])
 	ctx.body = []byte{} //oauth 路径显式置空，业务层未设置时也不回退到客户端凭据报文
 	if err = args.GetValues(data, &ctx); err != nil {
 		return err

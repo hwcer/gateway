@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hwcer/cosgo/binder"
-	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/cosrpc"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
@@ -156,13 +155,16 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	} else {
 		vs.Set(gwcfg.ServiceMetadataDeveloper, 0)
 	}
-	if _, err = ctx.login(data.Openid, vs); err != nil {
+	var s string
+	if s, err = ctx.login(data.Openid, vs); err != nil {
 		return err
 	}
 
 	if Setting.G2SOAuth == "" {
 		return nil
 	}
+	//将秘钥 传给 业务服务器由业务层决定要不要在确认包中返回给客户端
+	ctx.SetMetadata(gwcfg.ServicePlayerCookie, s)
 	ctx.body = []byte{} //oauth 路径显式置空，业务层未设置时也不回退到客户端凭据报文
 	if err = args.GetValues(data, &ctx); err != nil {
 		return err
@@ -264,7 +266,6 @@ type SocketRequest struct {
 	body     []byte
 	header   map[string]string
 	metadata values.Metadata
-	flag     *message.Flag //override，nil 时读底层消息的 flag
 	path     string
 }
 
@@ -308,16 +309,9 @@ func (this *SocketRequest) logout() error {
 	this.Context.Socket.Close()
 	return nil
 }
-func (this *SocketRequest) Flag(set ...message.Flag) message.Flag {
-	if len(set) > 0 {
-		f := set[0]
-		this.flag = &f
-	}
-	if this.flag != nil {
-		return *this.flag
-	}
-	return this.Context.Message.Flag()
-}
+
+// Flag 直接由内嵌的 cosnet.Context 提供：出站(确认包)flag，与入站 Message.Flag() 独立
+
 func (this *SocketRequest) Index() int32 {
 	return this.Context.Message.Index()
 }

@@ -12,7 +12,7 @@ import (
 // 负责处理网关请求信息、透传设置、响应元数据等。
 type Context interface {
 	Path(set ...string) string             //无参取值；传参设置(路由 path)
-	Flag(set ...message.Flag) message.Flag //无参取值；传参设置
+	Flag(set ...message.Flag) message.Flag //出站包 flag,无参取值；传参设置(与入站 flag 独立)
 	Index() int32                          //包序号,request id
 	Buffer(set ...[]byte) ([]byte, error)  //数据包
 	Header() map[string]string             //HTTP 请求头,tcp/wss 只有 Accept,Content-Type
