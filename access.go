@@ -62,7 +62,7 @@ func (this *access) None(r Request, req values.Metadata, isMaster bool) (p *sess
 	if sock := r.Socket(); sock != nil {
 		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
 	}
-	req[gwcfg.ServiceMetadataClientIp] = r.RemoteAddr()
+	req[gwcfg.ServiceMetadataAddress] = r.RemoteAddr()
 	return
 }
 
@@ -75,7 +75,7 @@ func (this *access) OAuth(r Request, req values.Metadata, needMaster bool) (p *s
 		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
 	}
 	req[gwcfg.ServiceMetadataGUID] = p.UUID()
-	req[gwcfg.ServiceMetadataClientIp] = r.RemoteAddr()
+	req[gwcfg.ServiceMetadataAddress] = r.RemoteAddr()
 	if needMaster && !this.IsDeveloper(p) {
 		err = errors.ErrNeedGameDeveloper
 	}

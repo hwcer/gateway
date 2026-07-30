@@ -7,9 +7,9 @@ const (
 	ServiceMetadataDeveloper  = "dev" //开发者身份
 	ServiceMetadataPermission = "per" //接口等级
 
-	ServiceMetadataSocketId  = "sock"
-	ServiceMetadataGateway   = "gate"
-	ServiceMetadataClientIp  = "_uip"
+	ServiceMetadataGateway   = "_gate"
+	ServiceMetadataAddress   = "_addr"
+	ServiceMetadataSocketId  = "_sock"
 	ServiceMetadataRequestId = "_rid" //Request id
 
 	ServiceMessagePath    = "_msg_path"
