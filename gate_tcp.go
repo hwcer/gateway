@@ -24,6 +24,11 @@ import (
 //   - *TcpServer: TCP服务器实例
 func NewTCPServer() *TcpServer {
 	s := &TcpServer{}
+	// 独占实例，不用 cosnet.Default：网关会对所持实例做全局性动作（关心跳计时器、
+	// session 心跳遍历整池、注册 Replaced/Disconnect/Authentication 回调、Start/Close），
+	// 共用全局池会把同进程里别人用 cosnet.Connect 建的连接一起卷进来。
+	// ⚠️ 由此带来的约束：**任何按 id 找 socket、或注册 socket 事件的代码都必须走这个实例**
+	// （TCP.Get / TCP.On），包级 cosnet.Get / cosnet.On 查的是 Default，在这里恒不生效。
 	s.Sockets = cosnet.New()
 	return s
 }
