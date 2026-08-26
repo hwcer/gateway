@@ -199,19 +199,19 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	Setting.Handler.S2CSecret(sock, ts)
 }
 
-// S2CReplaced 被顶号时下发提示（转交 Setting.Handler，默认 Default 以 JSON 下发）
+// S2CReplaced 有人请求顶号时下发协商提示（转交 Setting.Handler，默认 Default 以 JSON 下发）
 // 参数:
-//   - sock: cosnet socket
-//   - i: 事件数据，包含顶号 IP
+//   - sock: cosnet socket（进入协商期的老连接）
+//   - i: 事件数据 *cosnet.Replaced，含顶号方 IP 与协商剩余秒数
 func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if sock == nil {
 		return
 	}
-	ip, ok := i.(string)
+	r, ok := i.(*cosnet.Replaced)
 	if !ok {
 		return
 	}
-	Setting.Handler.S2CReplaced(sock, ip)
+	Setting.Handler.S2CReplaced(sock, r)
 }
 
 // C2SReconnect 处理重连请求

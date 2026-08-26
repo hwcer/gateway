@@ -68,7 +68,7 @@ type Handler interface {
 	Request(c context.Context) error                                                        //转发前预处理(如解密)，默认原样返回
 	Serialize(accept Accept, reply any) ([]byte, error)                                     //响应序列化
 	S2CSecret(sock *cosnet.Socket, secret string)                                           //登录成功给客户端下发秘钥
-	S2CReplaced(sock *cosnet.Socket, ip string)                                             //被顶号时给客户端下发提示
+	S2CReplaced(sock *cosnet.Socket, r *cosnet.Replaced)                                    //有人请求顶号时给客户端下发协商提示
 }
 
 var Setting = struct {
@@ -122,7 +122,11 @@ func (Default) S2CSecret(sock *cosnet.Socket, secret string) {
 	_ = sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, pathS2CSecret, secret)
 }
 
-// S2CReplaced 默认用 MagicNumberPathJson 以 JSON 下发顶号提示
-func (Default) S2CReplaced(sock *cosnet.Socket, ip string) {
-	_ = sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, pathS2CReplaced, ip)
+// S2CReplaced 默认用 MagicNumberPathJson 以 JSON 下发顶号协商提示
+//
+// 下发的是整个 *cosnet.Replaced（Address + Timeout），不再只是一个 IP 字符串：
+// 语义已经从"你被顶掉了"变成"有人想顶号，你还剩 Timeout 秒"，客户端得拿这个秒数
+// 决定是弹让出确认框还是提示倒计时。
+func (Default) S2CReplaced(sock *cosnet.Socket, r *cosnet.Replaced) {
+	_ = sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, pathS2CReplaced, r)
 }

@@ -66,7 +66,7 @@ type Handler interface {
     Response(c context.Context) error                   // 返回/推送后处理
     Serialize(accept Accept, reply any) ([]byte, error) // 响应序列化
     S2CSecret(sock *cosnet.Socket, secret string)       // 登录成功下发秘钥
-    S2CReplaced(sock *cosnet.Socket, ip string)         // 顶号下发提示
+    S2CReplaced(sock *cosnet.Socket, r *cosnet.Replaced) // 有人请求顶号，下发协商提示
     C2SOAuthArgs() token.Args                            // 解析 C2SOAuth 参数
 }
 ```
@@ -89,10 +89,32 @@ gateway.Setting.Handler = myHandler{}
 
 ```go
 sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, "S2CSecret", tokenString)
-sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, "S2CReplaced", remoteIP)
+sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, "S2CReplaced", replaced) // {Address, Timeout}
 ```
 
 如需自定义或禁用，在业务 Handler 中覆盖对应方法（禁用即写成空实现）。
+
+## 顶号协商
+
+**账号已在别处登录时，新端不会直接顶掉老连接**，而是先协商：
+
+| 步骤 | 发生了什么 |
+|---|---|
+| 新端登录（token） | `players.Negotiate` 发现老连接还活着 → 给它下发 `S2CReplaced{Address, Timeout}` 并开始倒计时；**新端本次登录被拒**，收到 `errors.ErrReplaced(剩余秒数)`（Code 209，Data 为秒数） |
+| 协商期内 | 老连接 **只收不发**：在途回包与服务器推送照常送达，它自己发来的新请求一律回 209。会话始终指向老连接，新端不会中途接管 |
+| 倒计时结束 / 老连接自己退出 | 老连接断开，会话上的 socket 被清空，`EventSessionDisconnect` 触发 |
+| 新端重新登录 | 无人占用，直接上线 |
+
+协商期长度由 `cosnet.Options.SocketReplacedTime` 控制（须 `<= SocketConnectTime`）。
+新端拿到的剩余秒数就是重试时机。
+
+⚠️ **`C2SReconnect`（secret 断线重连）不走协商，直接接管**：持有 secret 就是同一个客户端
+实例自己回来了。闪断时老 socket 往往还没被心跳判死，若这条路也排协商队，每次正常重连
+都得等满协商期——重连体验直接崩掉。
+
+三条登录路径（TCP / WSS / HTTP）行为一致，都在 `players.Login` **之前**协商：
+Login 会刷新 TOKEN 强制旧 TOKEN 失效，顶号被拒却把老玩家的 secret 作废了，
+他连断线重连都回不来。
 
 ## 消息推送
 

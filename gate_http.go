@@ -239,13 +239,18 @@ type HttpRequest struct {
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
 func (this *HttpRequest) login(guid string, value values.Values) (token string, err error) {
+	// 顶号协商：长连接还活着就拒掉本次登录（三条登录路径 TCP/WSS/HTTP 行为一致）。
+	// 必须在 Login 之前——理由见 players.Negotiate 的注释（Login 会刷掉老玩家的 TOKEN）。
+	if err = players.Negotiate(guid, this.Context.RemoteAddr(), nil); err != nil {
+		return
+	}
 	var data *session.Data
 	token, data, err = players.Login(guid, value)
 	if err != nil {
 		return
 	}
-	// 长连接顶号：如果用户已在其他地方登录，会顶掉旧连接
-	players.Replace(data, nil, this.Context.RemoteAddr())
+	// 短连接自己不持有 socket，这里只是把会话上的老长连接（若还在）收掉
+	players.Replace(data, nil)
 
 	// 设置cookie
 	cookie := &http.Cookie{Name: session.Options.Name, Path: "/", Value: token}
