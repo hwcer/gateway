@@ -1,7 +1,9 @@
 package gateway
 
 import (
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hwcer/gateway/gwcfg"
@@ -48,6 +50,41 @@ func TestAccessAllLevelsRegistered(t *testing.T) {
 	} {
 		if _, ok := Access.dict[l]; !ok {
 			t.Fatalf("OAuthType %v 没有注册 access 实现", l)
+		}
+	}
+}
+
+// TestAccessPlayerSendsIdentity Select / Player 档必须下发 GUID 与 UID。
+//
+// 🔴 缺 GUID 的后果是**推送静默丢弃**：网关的 send() 按 GUID 定位会话
+// （players.Get(guid)），拿不到就只打一行 Debug 日志。游戏服看不出来 —— 它的
+// c.Player 非空，推送走 player.Send 自带 GUID；而没有玩家容器的服务（社交服等）
+// 只能走 Context.Send 的另一条分支，表现是「接口调通了、客户端什么也没收到」。
+//
+// 用源码文本断言而不是跑一次 Verify：构造 Request / session.Data 要拖进网络与存储，
+// 而这条要钉的就是「那几行别被删掉」。
+func TestAccessPlayerSendsIdentity(t *testing.T) {
+	src, err := os.ReadFile("access.go")
+	if err != nil {
+		t.Fatalf("读取 access.go 失败:%v", err)
+	}
+	body := string(src)
+	i := strings.Index(body, "func (this *access) Player(")
+	if i < 0 {
+		t.Fatal("找不到 access.Player")
+	}
+	fn := body[i:]
+	if j := strings.Index(fn[1:], "\nfunc "); j > 0 {
+		fn = fn[:j]
+	}
+	for _, want := range []string{
+		"req[gwcfg.ServiceMetadataGUID]",
+		"req[gwcfg.ServiceMetadataUID]",
+		"req[gwcfg.ServiceMetadataSocketId]",
+	} {
+		if !strings.Contains(fn, want) {
+			t.Fatalf("access.Player 不再下发 %v —— 没有玩家容器的服务(社交服等)"+
+				"会推送不出去，且只打日志不报错", want)
 		}
 	}
 }

@@ -86,7 +86,16 @@ func (this *access) OAuth(r Request, req values.Metadata, needMaster bool) (p *s
 	return
 }
 
-// Player 必须选择角色
+// Player 必须选择角色（OAuthTypeSelect 与 OAuthTypePlayer 共用）
+//
+// 🔴 GUID 与 SocketId 与 UID 一并下发,缺一不可 —— 业务服要往回推消息时,
+// 网关的 send() 按 **GUID** 定位会话(players.Get(guid)),write() 按 SocketId
+// 定位连接;UID 只是发出去之前的一道防串号校验。
+//
+// 游戏服看不出这个缺失:它的 handler 里 c.Player 非空,推送走 player.Send,
+// 自带 GUID。但**没有玩家容器的服务**(社交服等)只能走 Context.Send 的另一条分支,
+// 那条分支拿不到 GUID/SocketId 就直接丢弃并打 Alert —— 表现是"接口调通了、
+// 客户端什么也没收到",而且只有翻日志才看得见。
 func (this *access) Player(r Request, req values.Metadata, needDeveloper bool) (p *session.Data, err error) {
 	if p, err = this.oauth(r, req); err != nil {
 		return nil, err
@@ -95,6 +104,10 @@ func (this *access) Player(r Request, req values.Metadata, needDeveloper bool) (
 	if uid == "" {
 		return nil, errors.ErrNotSelectRole
 	}
+	if sock := r.Socket(); sock != nil {
+		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
+	}
+	req[gwcfg.ServiceMetadataGUID] = p.UUID()
 	req[gwcfg.ServiceMetadataUID] = uid
 	if needDeveloper && !this.IsDeveloper(p) {
 		err = errors.ErrNeedGameDeveloper
