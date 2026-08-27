@@ -204,22 +204,9 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	Setting.Handler.S2CReplaced(sock, r)
 }
 
-// C2SReconnect 处理重连请求
-// 参数:
-//   - c: cosnet上下文
-//
-// 返回值:
-//   - any: 重连结果
+// C2SReconnect 处理长连接重连请求，逻辑与短连接共用，见 reconnect。
 func (this *TcpServer) C2SReconnect(c *cosnet.Context) any {
-	secret := string(c.Message.Body())
-	if secret == "" {
-		return values.Error("secret empty")
-	}
-	p, err := players.Reconnect(c.Socket, secret)
-	if err != nil {
-		return err
-	}
-	return p.GetInt32(gwcfg.ServiceMetadataRequestId)
+	return reconnect(&SocketRequest{Context: c})
 }
 
 // Disconnect 处理断开连接事件

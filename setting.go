@@ -47,6 +47,14 @@ type C2SHeartbeat interface {
 	C2SHeartbeat(r Request) any
 }
 
+// C2SReconnect 可选接口：业务 Handler 实现则覆盖网关默认重连处理。
+//
+// 参数同样是协议无关的 Request：网关默认实现要绑定 socket、短连接走不通，
+// 需要 HTTP 也支持重连时由业务层自己定义语义（比如只验 secret、只回 handledIndex）。
+type C2SReconnect interface {
+	C2SReconnect(r Request) any
+}
+
 // Response 可选接口：业务 Handler 实现则在回包/推送前做后处理（如加密、改包、改 flag）。
 // 未实现时网关原样返回，且不再构造响应上下文（socketContext/resFlag）。
 type Response interface {

@@ -156,64 +156,62 @@ func TestNegotiateNoIncumbent(t *testing.T) {
 //
 // 🔴 钉的是顶号时"取 ROLE 信息只收到一半"的根因：业务服先推数据、再回确认包，
 // 推送走 GUID（顶号后已指向新端）、确认包走请求自己的 socket（老端），
-// 一次响应被劈成两半，两头都拿不全。带上 socketId 之后两者一起回到老连接。
+// 一次响应被劈成两半，两头都拿不全。认 socketId 之后两者一起回到老连接。
 func TestResolveTargetKeepsResponseWhole(t *testing.T) {
 	ss := newTestSockets()
 	os, stop := newReplacedTestSocket(t, ss)
 	defer stop()
-	ns, stop2 := newReplacedTestSocket(t, ss)
-	defer stop2()
 
-	//模拟顶号：会话已指向新连接，老连接进入存活期（Closing，仍可写）
+	//顶号：老连接进入存活期（Closing，仍可写）
 	os.Replaced("10.0.0.1")
 	if !os.CanWrite() {
 		t.Fatal("老连接在存活期内必须仍可写")
 	}
-
-	got, ok := resolveTarget(ns, os.Id())
-	if !ok {
-		t.Fatal("原连接还活着,这条推送必须投给它而不是丢弃")
-	}
-	if !got.Is(os) {
-		t.Fatal("请求驱动的推送被投给了新连接——响应会被劈成两半")
+	//p 传 nil 模拟"会话已经指向别处"：带了 socketId 就该认它，不看会话
+	if got := resolveTarget(nil, os.Id()); got == nil || !got.Is(os) {
+		t.Fatal("带 socketId 时必须投给那条连接")
 	}
 }
 
-// TestResolveTargetNoSocketId 主动推送（定时器/AOI/跨玩家）没有 socketId，投给当前连接。
-func TestResolveTargetNoSocketId(t *testing.T) {
-	ss := newTestSockets()
-	sock, stop := newReplacedTestSocket(t, ss)
-	defer stop()
-
-	got, ok := resolveTarget(sock, 0)
-	if !ok || !got.Is(sock) {
-		t.Fatal("无 socketId 时应投给当前连接")
-	}
-	if _, ok = resolveTarget(nil, 0); ok {
-		t.Fatal("无 socketId 且不在线时应丢弃")
-	}
-}
-
-// TestResolveTargetNeverRedirects 原连接已销毁时必须丢弃，**绝不改投新连接**。
+// TestResolveTargetNeverRedirects 原连接已销毁时必须丢弃，**绝不回落 GUID 改投新连接**。
 func TestResolveTargetNeverRedirects(t *testing.T) {
 	ss := newTestSockets()
 	ns, stop := newReplacedTestSocket(t, ss)
 	defer stop()
 
-	//一个从不存在的 socket id：等价于原连接已经销毁
-	if got, ok := resolveTarget(ns, ns.Id()+9999); ok {
+	//一个从不存在的 socket id：等价于原连接已经销毁。
+	//即便按 GUID 能找到 ns，也不许改投给它。
+	if got := resolveTarget(nil, ns.Id()+9999); got != nil {
 		t.Fatalf("原连接已失效时必须丢弃,却投给了 socket %d", got.Id())
 	}
 }
 
-// TestResolveTargetSameGeneration 没换代时走最常见的直投路径。
-func TestResolveTargetSameGeneration(t *testing.T) {
+// TestResolveTargetByGuid 主动推送（定时器/AOI/跨玩家）没有 socketId，按会话投递。
+func TestResolveTargetByGuid(t *testing.T) {
+	ss := newTestSockets()
+	sock, stop := loginTestPlayer(t, ss, "guid-resolve")
+	defer stop()
+
+	p := players.Get("guid-resolve")
+	if got := resolveTarget(p, 0); got == nil || !got.Is(sock) {
+		t.Fatal("无 socketId 时应投给会话当前的连接")
+	}
+	if resolveTarget(nil, 0) != nil {
+		t.Fatal("两者都没有时应丢弃")
+	}
+}
+
+// TestSendPrefersSocketOverSession GUID 取不到会话时，只要 socketId 指的连接还在就该照投。
+//
+// 🔴 钉的是分工：**socketId 定位连接，GUID 只用来更新用户信息**。
+// 早先 players.Get 取不到就直接丢弃，等于让"socketId 优先"这条规则在登录途中失效。
+func TestSendPrefersSocketOverSession(t *testing.T) {
 	ss := newTestSockets()
 	sock, stop := newReplacedTestSocket(t, ss)
 	defer stop()
 
-	got, ok := resolveTarget(sock, sock.Id())
-	if !ok || !got.Is(sock) {
-		t.Fatal("会话指向的就是发起请求的那条连接,必须直投")
+	//p 为 nil 模拟"会话取不到"（登录途中 / 刚被清理）
+	if got := resolveTarget(nil, sock.Id()); got == nil || !got.Is(sock) {
+		t.Fatal("会话取不到但连接还在时,必须按 socketId 投递")
 	}
 }
