@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"github.com/hwcer/cosgo/values"
+	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 )
@@ -14,11 +15,11 @@ import (
 // ⚠️ 默认实现要绑定 socket，短连接没有 socket 可绑，走不到这条路。HTTP 若要支持重连，
 // 由业务 Handler 实现 C2SReconnect 自己定义语义（比如只验 secret、只回 handledIndex）
 // ——这正是接口参数用 Request 而不是 *cosnet.Context 的原因。
-func reconnect(r Request) any {
+func reconnect(c context.Context) any {
 	if h, ok := Setting.Handler.(C2SReconnect); ok {
-		return h.C2SReconnect(r) //业务 Handler 实现则优先
+		return h.C2SReconnect(c) //业务 Handler 实现则优先
 	}
-	body, err := r.Buffer()
+	body, err := c.Buffer()
 	if err != nil {
 		return err
 	}
@@ -26,7 +27,7 @@ func reconnect(r Request) any {
 	if secret == "" {
 		return values.Error("secret empty")
 	}
-	sock := r.Socket()
+	sock := c.Socket()
 	if sock == nil {
 		return values.Error("reconnect requires a socket")
 	}

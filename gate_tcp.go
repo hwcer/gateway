@@ -165,7 +165,7 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 		return err
 	}
 	var reply []byte
-	if reply, err = Forward(&ctx, Setting.G2SOAuth); err != nil {
+	if reply, err = forward(&ctx, Setting.G2SOAuth); err != nil {
 		return err
 	}
 	return reply
@@ -231,7 +231,7 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 		return err
 	}
 	ctx := SocketRequest{Context: c}
-	reply, err := Forward(&ctx, path)
+	reply, err := forward(&ctx, path)
 	if err != nil {
 		return err
 	}

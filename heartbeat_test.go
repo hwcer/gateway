@@ -3,6 +3,8 @@ package gateway
 import (
 	"testing"
 
+	"github.com/hwcer/gateway/context"
+
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/gateway/errors"
 	"github.com/hwcer/gateway/gwcfg"
@@ -11,7 +13,7 @@ import (
 // hbHandler 实现了 C2SHeartbeat 接口的业务 Handler
 type hbHandler struct{ Default }
 
-func (hbHandler) C2SHeartbeat(r Request) any { return nil }
+func (hbHandler) C2SHeartbeat(c context.Context) any { return nil }
 
 // hbBadRouter 路由永远解析不出来的 Handler
 type hbBadRouter struct{ Default }

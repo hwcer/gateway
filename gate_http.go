@@ -193,7 +193,7 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	}
 
 	var reply []byte
-	if reply, err = Forward(&ctx, Setting.G2SOAuth); err != nil {
+	if reply, err = forward(&ctx, Setting.G2SOAuth); err != nil {
 		return err
 	}
 	return reply
@@ -216,7 +216,7 @@ func (this *HttpServer) C2SHeartbeat(c *cosweb.Context) any {
 func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 	// 创建 http 代理并处理请求
 	ctx := HttpRequest{Context: c}
-	reply, err := Forward(&ctx, c.Request.URL.Path)
+	reply, err := forward(&ctx, c.Request.URL.Path)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"github.com/hwcer/gateway/context"
 	"time"
 
 	"github.com/hwcer/cosgo/registry"
@@ -20,15 +21,20 @@ import (
 // ⚠️ 未选角不转发：那时业务服没有玩家对象可刷，而且心跳走默认的 Player 档，
 // 转过去也只会被 Access 回 ErrNotSelectRole——白跑一次 RPC。未选角的连接由网关自己保活。
 // ⚠️ 转发失败降级为网关应答，不把错误抛给客户端：业务服一抖动，全服连接不该跟着掉。
-func heartbeat(r Request) any {
+func heartbeat(c context.Context) any {
 	if h, ok := Setting.Handler.(C2SHeartbeat); ok {
-		return h.C2SHeartbeat(r)
+		return h.C2SHeartbeat(c)
 	}
-	p := r.Session() //GetString 不是 nil-safe,必须先判空
+	p := c.Session() //GetString 不是 nil-safe,必须先判空
 	if Setting.G2SHeartbeat != "" && p != nil && p.GetString(gwcfg.ServiceMetadataUID) != "" {
-		reply, err := Forward(r, Setting.G2SHeartbeat)
+		res := values.Metadata{}
+		reply, err := Forward(c, Setting.G2SHeartbeat, res)
 		if err == nil {
-			return reply
+			//回包直接发给客户端，要和代理路径一样过 Response 钩子，理由见 response
+			var b []byte
+			if b, err = response(c, Setting.G2SHeartbeat, reply, res); err == nil {
+				return b
+			}
 		}
 		logger.Debug("心跳转发失败,path:%v,err:%v", Setting.G2SHeartbeat, err)
 	}
