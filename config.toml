@@ -13,6 +13,11 @@ address="127.0.0.1:8100"  #RPC服务地址,一般使用默认值,使用内网IP
 [gate]
 address=":8000"
 protocol=7    #1-websocket，2-长连接，4-短链接
+#是否强制顶号，默认 true
+#true : 新端立即接管上线，老连接收到通知后把在途回包发完就断
+#false: 新端本次登录被拒(返回剩余秒数)，等老连接下线后重新登录才能上来
+#两种策略下老连接的处置一样：都会收到顶号通知，都有"只收不发"的存活期
+forceReplace=true
 static.root="wwwroot"
 static.route="ui"
 static.index="index.html"

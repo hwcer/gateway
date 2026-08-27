@@ -7,6 +7,7 @@ import (
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
 	"github.com/hwcer/gateway/errors"
+	"github.com/hwcer/gateway/gwcfg"
 )
 
 const (
@@ -22,19 +23,19 @@ func Socket(p *session.Data) *cosnet.Socket {
 	return r
 }
 
-// Negotiate 顶号协商：老连接还活着时**不允许**新端直接上线。
+// Negotiate 顶号处置：通知老连接，并按 gate.forceReplace 决定新端能不能立刻上线。
 //
-//	返回 nil          没有活着的老连接，调用方继续登录即可
-//	返回 ErrReplaced  已给老连接发出顶号通知并开始倒计时，本次登录被拒；
-//	                  倒计时结束（或老连接自己退出）后再次登录即可直接上线
+//	返回 nil          新端继续登录（没有活着的老连接，或配置为强制顶号）
+//	返回 ErrReplaced  协商顶号且老连接还活着：本次登录被拒，Data 是剩余秒数，
+//	                  老连接下线后再次登录即可上线
 //
-// 老连接在协商期内 **只收不发**：在途回包和服务器推送照常送达，它自己发来的新请求
-// 被回 209（见 cosnet.Socket.CanRead/CanWrite）。会话自始至终指向老连接，
-// 直到它真的断开才由 Disconnect 清空——新端不会中途接管，也就不会收到属于老连接的回包。
+// **两种策略下老连接的处置完全一样**：进入 SocketReplacedTime 秒的"只收不发"存活期
+// ——在途回包与服务器推送照常送达，它自己发来的新请求一律被回 209
+// （见 cosnet.Socket.CanRead/CanWrite），到期断开。唯一的分歧只有新端等不等它。
 //
 // ⚠️ 必须在 Login **之前**调用。Login 的 loaded 分支会 p.Update(value) 用新登录者的数据
-// 覆盖老会话，还会 ss.Refresh() 强制旧 TOKEN 失效——顶号被拒却把老玩家的 secret 作废了，
-// 他连断线重连都回不来，等于"不许顶号"反而把人踢得更彻底。
+// 覆盖老会话，还会 ss.Refresh() 强制旧 TOKEN 失效——协商模式下顶号被拒却把老玩家的
+// secret 作废了，他连断线重连都回不来，等于"不许顶号"反而把人踢得更彻底。
 //
 // ⚠️ 在会话锁**外面**调用 os.Replaced：它会 Emit 事件同步走到业务层的下发逻辑，
 // 塞进 p.Mutex 里迟早撞上重入死锁。
@@ -53,7 +54,10 @@ func Negotiate(guid, ip string, sock *cosnet.Socket) error {
 	if i := strings.Index(ip, ":"); i > 0 {
 		ip = ip[:i]
 	}
-	os.Replaced(ip) //已在协商期内则内部返回 false：不重复通知，也不重置倒计时
+	os.Replaced(ip) //已在存活期内则内部返回 false：不重复通知，也不重置倒计时
+	if gwcfg.Options.Gate.ForceReplace {
+		return nil //强制顶号：新端立即接管，老连接把在途回包发完即可
+	}
 	return errors.ErrReplaced(os.Countdown())
 }
 

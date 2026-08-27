@@ -94,19 +94,27 @@ sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, "S2CRepl
 
 如需自定义或禁用，在业务 Handler 中覆盖对应方法（禁用即写成空实现）。
 
-## 顶号协商
+## 顶号
 
-**账号已在别处登录时，新端不会直接顶掉老连接**，而是先协商：
+账号已在别处登录时，`players.Login` **之前**先过 `players.Negotiate`。
 
-| 步骤 | 发生了什么 |
-|---|---|
-| 新端登录（token） | `players.Negotiate` 发现老连接还活着 → 给它下发 `S2CReplaced{Address, Timeout}` 并开始倒计时；**新端本次登录被拒**，收到 `errors.ErrReplaced(剩余秒数)`（Code 209，Data 为秒数） |
-| 协商期内 | 老连接 **只收不发**：在途回包与服务器推送照常送达，它自己发来的新请求一律回 209。会话始终指向老连接，新端不会中途接管 |
-| 倒计时结束 / 老连接自己退出 | 老连接断开，会话上的 socket 被清空，`EventSessionDisconnect` 触发 |
-| 新端重新登录 | 无人占用，直接上线 |
+**老连接的处置与策略无关，永远是这一套**：收到 `S2CReplaced{Address, Timeout}` 通知，
+进入 `cosnet.Options.SocketReplacedTime` 秒的 **只收不发** 存活期——在途回包与服务器推送
+照常送达，它自己发来的新请求一律回 209——到期断开。
 
-协商期长度由 `cosnet.Options.SocketReplacedTime` 控制（须 `<= SocketConnectTime`）。
-新端拿到的剩余秒数就是重试时机。
+`gate.forceReplace` 只决定**新端等不等它**：
+
+| | `forceReplace=true`（默认） | `forceReplace=false` |
+|---|---|---|
+| 新端 | **立即接管**会话上线 | 本次登录被拒，收到 `errors.ErrReplaced(剩余秒数)`（Code 209，Data 为秒数），等老连接下线后重新登录 |
+| 会话指向 | 立刻改指新连接 | 仍指老连接，直到它真的断开 |
+| 老连接断开时 | 不报掉线（人已在新连接上） | 报 `EventSessionDisconnect`（此刻玩家真的离线了） |
+| 老连接的在途确认包 | 照常发出（走请求自己的 socket） | 照常发出 |
+| 老连接的服务器推送 | **投给新连接**（`send` 按 GUID 查到的已是新 socket） | 仍投给老连接 |
+
+最后一行是两者的实质差别：强制顶号下，一次请求的推送与确认包会被劈成两半
+——推送给新端、确认包给老端，老客户端拿不到完整响应。协商模式没有这个问题，
+代价是新端要等。默认强制，按业务取舍。
 
 ⚠️ **`C2SReconnect`（secret 断线重连）不走协商，直接接管**：持有 secret 就是同一个客户端
 实例自己回来了。闪断时老 socket 往往还没被心跳判死，若这条路也排协商队，每次正常重连
