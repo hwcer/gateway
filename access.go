@@ -58,10 +58,8 @@ func (this *access) oauth(r Request, req values.Metadata) (p *session.Data, err 
 }
 
 // None 普通接口
+// SocketId 由 proxyRequest 统一下发（所有档位一致），这里不再单独塞
 func (this *access) None(r Request, req values.Metadata, isMaster bool) (p *session.Data, err error) {
-	if sock := r.Socket(); sock != nil {
-		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
-	}
 	req[gwcfg.ServiceMetadataAddress] = r.RemoteAddr()
 	return
 }
@@ -70,9 +68,6 @@ func (this *access) None(r Request, req values.Metadata, isMaster bool) (p *sess
 func (this *access) OAuth(r Request, req values.Metadata, needMaster bool) (p *session.Data, err error) {
 	if p, err = this.oauth(r, req); err != nil {
 		return nil, err
-	}
-	if sock := r.Socket(); sock != nil {
-		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
 	}
 	req[gwcfg.ServiceMetadataGUID] = p.UUID()
 	req[gwcfg.ServiceMetadataAddress] = r.RemoteAddr()

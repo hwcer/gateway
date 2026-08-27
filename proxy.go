@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/hwcer/cosnet/message"
@@ -68,6 +69,18 @@ func proxyRequest(proxy Request, path string) (reply []byte, err error) {
 
 	// 设置网关地址和用户级别微服务筛选器
 	req.Set(gwcfg.ServiceMetadataGateway, cosrpc.Address().Encode())
+	// **每一次长连接转发都带上发起它的那条连接 id**，与鉴权档位无关。
+	//
+	// 业务服推消息时把它原样带回来（yyds 的 NewSender 已经这么做），网关据此判断
+	// "这条推送还属不属于当初那条连接"——顶号或重连之后会话已经指向新 socket，
+	// 按 GUID 投就会把上一代连接的数据推给刚上来的新端，而那次请求的确认包却走
+	// 请求自己的 socket。一次响应被劈成两半，客户端两头都拿不全。
+	//
+	// ⚠️ 曾经只有 None/OAuth 两档塞它，Player/Select 档不塞。业务服感觉不到，
+	// 因为 c.Send 会从玩家对象上现取 GUID 兜住；坏就坏在兜住之后没人发现路由变了。
+	if sock := proxy.Socket(); sock != nil {
+		req.Set(gwcfg.ServiceMetadataSocketId, strconv.FormatUint(sock.Id(), 10))
+	}
 	// 使用用户级别微服务筛选器：如果用户会话中存在该服务的地址，则使用该地址
 	if p != nil {
 		if serviceAddress := p.GetString(gwcfg.GetServiceSelectorAddress(servicePath)); serviceAddress != "" {
