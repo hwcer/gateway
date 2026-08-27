@@ -239,9 +239,8 @@ type HttpRequest struct {
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
 func (this *HttpRequest) login(guid string, value values.Values) (token string, err error) {
-	// 顶号协商：长连接还活着就拒掉本次登录（三条登录路径 TCP/WSS/HTTP 行为一致）。
-	// 必须在 Login 之前——理由见 players.Negotiate 的注释（Login 会刷掉老玩家的 TOKEN）。
-	if err = players.Negotiate(guid, this.Context.RemoteAddr(), nil); err != nil {
+	// 顶号处置：三条登录路径 TCP/WSS/HTTP 行为一致，且必须在 Login 之前，理由见 negotiate
+	if err = negotiate(guid, this.Context.RemoteAddr(), nil); err != nil {
 		return
 	}
 	var data *session.Data

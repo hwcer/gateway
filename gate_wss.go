@@ -59,6 +59,12 @@ func WSAccept(sock *cosnet.Socket, meta map[string]string) {
 		return
 	}
 	value := gwcfg.Cookies.Filter(meta)
+	//顶号处置必须在 players.Connect(内含 Login)之前，理由见 negotiate
+	if err := negotiate(uuid, sock.RemoteAddr().String(), sock); err != nil {
+		logger.Alert("wss session replaced:%v", err)
+		sock.Close(0) //协商模式下新端不能上线，这条连接没有存在意义
+		return
+	}
 	if _, err := players.Connect(sock, uuid, value); err != nil {
 		logger.Alert("wss session create fail:%v", err)
 	}

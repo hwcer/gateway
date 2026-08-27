@@ -102,9 +102,14 @@ sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, "S2CRepl
 进入 `cosnet.Options.SocketReplacedTime` 秒的 **只收不发** 存活期——在途回包与服务器推送
 照常送达，它自己发来的新请求一律回 209——到期断开。
 
-`gate.forceReplace` 只决定**新端等不等它**：
+`Setting.ForceReplace` 只决定**新端等不等它**（网关专用策略，写在代码里而非
+`gwcfg` —— 那是所有服务共享的配置）：
 
-| | `forceReplace=true`（默认） | `forceReplace=false` |
+```go
+gateway.Setting.ForceReplace = false // 默认 true
+```
+
+| | `ForceReplace=true`（默认） | `ForceReplace=false` |
 |---|---|---|
 | 新端 | **立即接管**会话上线 | 本次登录被拒，收到 `errors.ErrReplaced(剩余秒数)`（Code 209，Data 为秒数），等老连接下线后重新登录 |
 | 会话指向 | 立刻改指新连接 | 仍指老连接，直到它真的断开 |
@@ -115,6 +120,10 @@ sock.SendWithMagic(message.MagicNumberPathJson, message.FlagNoreply, 0, "S2CRepl
 最后一行是两者的实质差别：强制顶号下，一次请求的推送与确认包会被劈成两半
 ——推送给新端、确认包给老端，老客户端拿不到完整响应。协商模式没有这个问题，
 代价是新端要等。默认强制，按业务取舍。
+
+分层：`players.Negotiate` 只做**不带策略**的原语（通知老连接、返回剩余存活秒数），
+拒不拒由 `gateway.negotiate` 按 `Setting.ForceReplace` 决定。
+⚠️ `players.Connect` 自己**不做**顶号判断，直接调它等于无条件强制顶号。
 
 ⚠️ **`C2SReconnect`（secret 断线重连）不走协商，直接接管**：持有 secret 就是同一个客户端
 实例自己回来了。闪断时老 socket 往往还没被心跳判死，若这条路也排协商队，每次正常重连

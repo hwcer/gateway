@@ -295,13 +295,20 @@ func (this *SocketRequest) verify() (*session.Data, error) {
 //   - token: 登录令牌
 //   - error: 登录过程中的错误
 func (this *SocketRequest) login(guid string, value values.Values) (token string, err error) {
-	data := this.Context.Socket.Data()
+	sock := this.Context.Socket
+	data := sock.Data()
 	if data != nil {
 		if data.UUID() != guid {
 			return "", fmt.Errorf("please do not login again")
 		}
-	} else if data, err = players.Connect(this.Context.Socket, guid, value); err != nil {
-		return
+	} else {
+		//顶号处置必须在 players.Connect(内含 Login)之前，理由见 negotiate
+		if err = negotiate(guid, sock.RemoteAddr().String(), sock); err != nil {
+			return
+		}
+		if data, err = players.Connect(sock, guid, value); err != nil {
+			return
+		}
 	}
 	ss := session.New(data)
 	return ss.Token()

@@ -77,11 +77,25 @@ var Setting = struct {
 	C2SHeartbeat string  //客户端心跳包名
 	C2SReconnect string  //客户端断线重连包名
 	Handler      Handler //网关行为实现,默认 Default{};业务层嵌入 Default 覆盖需要改变的方法
+
+	// ForceReplace 是否强制顶号，默认 true。
+	//
+	// 两种策略下**老连接的处置完全一样**：收到顶号通知，进入
+	// cosnet.Options.SocketReplacedTime 秒的"只收不发"存活期（在途回包照常送达、
+	// 它自己发来的新请求被回 209），到期断开。唯一的区别是新端：
+	//   true  强制顶号：新端**立即接管**会话上线，老连接把在途回包发完就没人理它了
+	//   false 协商顶号：新端**本次登录被拒**（收到 errors.ErrReplaced + 剩余秒数），
+	//         等老连接下线后再次登录才能上来
+	//
+	// 实质差别在服务器推送：强制模式下 send 按 GUID 查到的已是新 socket，老连接那次
+	// 请求的推送投给新端、确认包却走老端，一次响应被劈成两半；协商模式没有这个问题。
+	ForceReplace bool
 }{
 	C2SOAuth:     "oauth",
 	C2SHeartbeat: "C2SHeartbeat",
 	C2SReconnect: "C2SReconnect",
 	Handler:      Default{},
+	ForceReplace: true,
 }
 
 // Default 网关行为默认实现。业务层嵌入它，只覆盖需要改变的方法。

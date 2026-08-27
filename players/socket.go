@@ -6,8 +6,6 @@ import (
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
-	"github.com/hwcer/gateway/errors"
-	"github.com/hwcer/gateway/gwcfg"
 )
 
 const (
@@ -23,15 +21,15 @@ func Socket(p *session.Data) *cosnet.Socket {
 	return r
 }
 
-// Negotiate 顶号处置：通知老连接，并按 gate.forceReplace 决定新端能不能立刻上线。
+// Negotiate 顶号：通知老连接进入"只收不发"的存活期，返回它的剩余存活秒数。
 //
-//	返回 nil          新端继续登录（没有活着的老连接，或配置为强制顶号）
-//	返回 ErrReplaced  协商顶号且老连接还活着：本次登录被拒，Data 是剩余秒数，
-//	                  老连接下线后再次登录即可上线
+// 返回 0 表示没有活着的老连接（或就是这条连接自己在重复登录），新端可以直接上线。
 //
-// **两种策略下老连接的处置完全一样**：进入 SocketReplacedTime 秒的"只收不发"存活期
-// ——在途回包与服务器推送照常送达，它自己发来的新请求一律被回 209
-// （见 cosnet.Socket.CanRead/CanWrite），到期断开。唯一的分歧只有新端等不等它。
+// ⚠️ **要不要让新端等这段时间，是策略，不在这一层**。这里只负责处置老连接：
+// 它进入存活期后，在途回包与服务器推送照常送达，它自己发来的新请求一律被回 209
+// （见 cosnet.Socket.CanRead/CanWrite），到期断开。新端立即接管还是等它下线，
+// 由网关层按 Setting.ForceReplace 决定——players 是 gateway 的子包，读不到那个配置，
+// 这个分层也正好让"处置老连接"和"放不放新端进来"各自独立。
 //
 // ⚠️ 必须在 Login **之前**调用。Login 的 loaded 分支会 p.Update(value) 用新登录者的数据
 // 覆盖老会话，还会 ss.Refresh() 强制旧 TOKEN 失效——协商模式下顶号被拒却把老玩家的
@@ -39,26 +37,23 @@ func Socket(p *session.Data) *cosnet.Socket {
 //
 // ⚠️ 在会话锁**外面**调用 os.Replaced：它会 Emit 事件同步走到业务层的下发逻辑，
 // 塞进 p.Mutex 里迟早撞上重入死锁。
-func Negotiate(guid, ip string, sock *cosnet.Socket) error {
+func Negotiate(guid, ip string, sock *cosnet.Socket) int32 {
 	p := Get(guid)
 	if p == nil {
-		return nil //从没登录过
+		return 0 //从没登录过
 	}
 	os := Socket(p)
 	if os == nil || !os.CanWrite() {
-		return nil //老连接不存在或已经死了(CanWrite 覆盖 Connected|Closing,即"还活着")
+		return 0 //老连接不存在或已经死了(CanWrite 覆盖 Connected|Closing,即"还活着")
 	}
 	if os.Is(sock) {
-		return nil //就是这条连接自己在重复登录
+		return 0 //就是这条连接自己在重复登录
 	}
 	if i := strings.Index(ip, ":"); i > 0 {
 		ip = ip[:i]
 	}
 	os.Replaced(ip) //已在存活期内则内部返回 false：不重复通知，也不重置倒计时
-	if gwcfg.Options.Gate.ForceReplace {
-		return nil //强制顶号：新端立即接管，老连接把在途回包发完即可
-	}
-	return errors.ErrReplaced(os.Countdown())
+	return os.Countdown()
 }
 
 // Replace 把会话绑定到新连接；老连接（若还在）立即进入关闭流程。
@@ -85,11 +80,12 @@ func Replace(p *session.Data, sock *cosnet.Socket) {
 	})
 }
 
-// Connect 长连接登录（token 路径），已在别处登录时走顶号协商、拒绝本次登录。
+// Connect 长连接登录（token 路径）：建立/复用会话并绑定到这条连接。
+//
+// ⚠️ **它自己不做顶号判断**。调用方必须先过网关层的 negotiate——那里才拿得到
+// Setting.ForceReplace，也才决定得了"老连接还活着时新端能不能进来"。
+// 直接调这个函数等于无条件强制顶号。
 func Connect(sock *cosnet.Socket, guid string, value values.Values) (data *session.Data, err error) {
-	if err = Negotiate(guid, sock.RemoteAddr().String(), sock); err != nil {
-		return nil, err
-	}
 	if _, data, err = Login(guid, value); err == nil {
 		Replace(data, sock)
 	}
