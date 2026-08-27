@@ -16,7 +16,7 @@ import (
 	"github.com/hwcer/logger"
 )
 
-var Service = server.Service(gwcfg.ServiceName)
+var Service = server.Service(gwcfg.ServiceTypeGate)
 
 func init() {
 	Register(send)
@@ -105,7 +105,7 @@ func send(c *cosrpc.Context) any {
 //
 // 规则只有一条：**请求驱动的推送必须回到发起它的那条连接**。
 //
-// proxyRequest 每次转发都带上 socketId，业务服推消息时原样带回，于是这里能认出
+// Forward 每次转发都带上 socketId，业务服推消息时原样带回，于是这里能认出
 // "会话已经换到别的连接上了"——顶号或重连之后按 GUID 投，就会把上一代连接的数据
 // 推给刚上来的新端；而那次请求的确认包走的是请求自己的 socket，一次响应被劈成两半，
 // 两头都拿不全。这正是顶号时"取 ROLE 信息只收到一半"的根因。

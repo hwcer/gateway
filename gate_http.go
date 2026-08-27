@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosnet"
@@ -194,13 +193,18 @@ func (this *HttpServer) oauth(c *cosweb.Context) any {
 	}
 
 	var reply []byte
-	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
+	if reply, err = Forward(&ctx, Setting.G2SOAuth); err != nil {
 		return err
 	}
 	return reply
 }
+
+// C2SHeartbeat 处理短连接心跳请求，逻辑与长连接共用，见 heartbeat。
+//
+// ⚠️ 原来这里是硬编码的时间戳：既不过业务 Handler 的钩子、也不转发到游戏服，
+// 短连接客户端的角色照样会在游戏服那边被判掉线。
 func (this *HttpServer) C2SHeartbeat(c *cosweb.Context) any {
-	return time.Now().UnixMilli()
+	return heartbeat(&HttpRequest{Context: c})
 }
 
 // proxy 处理HTTP请求代理
@@ -212,7 +216,7 @@ func (this *HttpServer) C2SHeartbeat(c *cosweb.Context) any {
 func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 	// 创建 http 代理并处理请求
 	ctx := HttpRequest{Context: c}
-	reply, err := proxyRequest(&ctx, c.Request.URL.Path)
+	reply, err := Forward(&ctx, c.Request.URL.Path)
 	if err != nil {
 		return err
 	}

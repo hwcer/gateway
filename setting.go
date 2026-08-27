@@ -39,14 +39,12 @@ type Accept interface {
 	Accept() binder.Binder
 }
 
-// C2SHeartbeat 可选接口：业务 Handler 实现则覆盖网关默认心跳处理
+// C2SHeartbeat 可选接口：业务 Handler 实现则覆盖网关默认心跳处理。
+//
+// 参数是协议无关的 Request（不是 *cosnet.Context）——**短连接也有心跳保活**，
+// 长短连接共用同一个钩子。要转发到后端服务时直接把它交给 gateway.Forward 即可。
 type C2SHeartbeat interface {
-	C2SHeartbeat(c *cosnet.Context) any
-}
-
-// C2SReconnect 可选接口：业务 Handler 实现则覆盖网关默认重连处理
-type C2SReconnect interface {
-	C2SReconnect(c *cosnet.Context) any
+	C2SHeartbeat(r Request) any
 }
 
 // Response 可选接口：业务 Handler 实现则在回包/推送前做后处理（如加密、改包、改 flag）。
@@ -75,6 +73,7 @@ var Setting = struct {
 	C2SOAuth     string  //网关登录包名,置空时不启用默认验证方式
 	G2SOAuth     string  //游戏服登录验证,网关登录成功后继续用GUID去游戏服验证,留空不验证
 	C2SHeartbeat string  //客户端心跳包名
+	G2SHeartbeat string  //游戏服心跳包名
 	C2SReconnect string  //客户端断线重连包名
 	Handler      Handler //网关行为实现,默认 Default{};业务层嵌入 Default 覆盖需要改变的方法
 

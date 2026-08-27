@@ -61,7 +61,7 @@ func (this *Channel) Broadcast(path string, args any, name, value string, req va
 	}
 	req[gwcfg.ServiceMessagePath] = path
 	req[gwcfg.ServiceMessageChannel] = ChannelNameEncode(name, value)
-	if err := client.CallWithMetadata(req, nil, gwcfg.ServiceName, "channel/broadcast", args, nil); err != nil {
+	if err := client.CallWithMetadata(req, nil, gwcfg.ServiceTypeGate, "channel/broadcast", args, nil); err != nil {
 		logger.Debug("频道广播失败:%v", err)
 	}
 }

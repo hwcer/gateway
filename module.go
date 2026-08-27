@@ -32,7 +32,7 @@ type Module struct {
 }
 
 func (this *Module) Id() string {
-	return gwcfg.ServiceName
+	return gwcfg.ServiceTypeGate
 }
 
 func (this *Module) Init() (err error) {
@@ -77,6 +77,9 @@ func (this *Module) Init() (err error) {
 		}
 		gwcfg.Authorize.Set(ServicePath, ServiceMethod, gwcfg.OAuthTypeOAuth)
 	}
+	//心跳走默认的 Player 档(要进玩家协程才刷得到心跳戳),不必额外定级,
+	//但转发路径要在这里算死并校验,见 initHeartbeat
+	initHeartbeat()
 
 	return nil
 }

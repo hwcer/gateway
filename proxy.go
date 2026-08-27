@@ -24,7 +24,7 @@ import (
 var ElapsedMillisecond = 500 * time.Millisecond
 
 // Request 内部转发时使用：在 context.Context（统一请求上下文）之上附加登录态内部操作，
-// 仅 proxyRequest/access 使用；业务层只接触 context.Context。
+// 仅 Forward/access 使用；业务层只接触 context.Context。
 type Request interface {
 	context.Context
 	login(guid string, value values.Values) (string, error) //通过业务服激活登录信息（gateway 内部）
@@ -32,15 +32,28 @@ type Request interface {
 	verify() (*session.Data, error)                         //验证登录信息（gateway 内部）
 }
 
-// proxy 代理转发函数
-// 用于处理所有协议的请求转发，包括HTTP、TCP和WebSocket
+// Forward 把一次请求转发到后端服务并取回回包，HTTP / TCP / WebSocket 共用这一条路径。
+//
+// 它完整走一遍：路由解析 → 权限校验 → 下发 metadata（网关地址 / socketId / 用户级服务定向）
+// → Request 钩子 → RPC 调用 → 登录/登出处理 → cookies 更新 → Response 钩子。
+//
+// **业务层可以直接调它把消息投递到后端**，不必手搓 metadata：
+//
+//	ctx := &gateway.SocketRequest{Context: c}
+//	reply, err := gateway.Forward(ctx, "/game/heartbeat")
+//
+// ⚠️ 自己拼 metadata 去 client.CallWithMetadata 是很容易出错的路子：权限档、网关地址、
+// 由消息 magic 推导的 Accept/Content-Type、用户级服务定向地址，漏一个的症状都很隐蔽
+// （回包编码不对、被判顶号、多区服投错服）。走这里就都对了。
+//
 // 参数:
-//   - h: 上下文对象，包含请求的元数据、路径、缓冲区等信息
+//   - proxy: 请求上下文，用框架提供的 SocketRequest / HttpRequest 构造
+//   - path:  转发目标路径，交给 Setting.Handler.Router 解析成 servicePath/serviceMethod
 //
 // 返回值:
-//   - reply: 服务返回的数据
-//   - err: 处理过程中的错误
-func proxyRequest(proxy Request, path string) (reply []byte, err error) {
+//   - reply: 后端返回的数据（已过 Response 钩子）
+//   - err:   路由/鉴权/调用过程中的错误
+func Forward(proxy Request, path string) (reply []byte, err error) {
 	// 异常捕获和错误处理
 	defer func() {
 		if e := recover(); e != nil {

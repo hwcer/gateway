@@ -9,7 +9,7 @@ import (
 )
 
 // socketContext 是 context.Context 的"脱离入站请求"实现：
-// 用于服务器推送(send/broadcast)、顶号/秘钥下发(S2CSecret/S2CReplaced)以及 proxyRequest 的钩子阶段，
+// 用于服务器推送(send/broadcast)、顶号/秘钥下发(S2CSecret/S2CReplaced)以及 Forward 的钩子阶段，
 // 携带该阶段正确的 path/flag/metadata/session/socket，与具体入站请求(HttpRequest/SocketRequest)解耦。
 type socketContext struct {
 	sock   *cosnet.Socket

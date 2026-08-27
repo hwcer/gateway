@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"time"
 
 	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosrpc"
@@ -122,18 +121,9 @@ func (this *TcpServer) Accept(ln net.Listener) error {
 	return nil
 }
 
-// C2SHeartbeat 处理心跳请求
-// 参数:
-//   - c: cosnet上下文
-//
-// 返回值:
-//   - any: 当前时间戳（毫秒）
+// C2SHeartbeat 处理长连接心跳请求，逻辑与短连接共用，见 heartbeat。
 func (this *TcpServer) C2SHeartbeat(c *cosnet.Context) any {
-	if h, ok := Setting.Handler.(C2SHeartbeat); ok {
-		return h.C2SHeartbeat(c)
-	}
-	ms := time.Now().UnixMilli()
-	return ms
+	return heartbeat(&SocketRequest{Context: c})
 }
 
 // C2SOAuth 处理认证请求
@@ -175,7 +165,7 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 		return err
 	}
 	var reply []byte
-	if reply, err = proxyRequest(&ctx, Setting.G2SOAuth); err != nil {
+	if reply, err = Forward(&ctx, Setting.G2SOAuth); err != nil {
 		return err
 	}
 	return reply
@@ -221,9 +211,6 @@ func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 // 返回值:
 //   - any: 重连结果
 func (this *TcpServer) C2SReconnect(c *cosnet.Context) any {
-	if h, ok := Setting.Handler.(C2SReconnect); ok {
-		return h.C2SReconnect(c) //业务 Handler 实现则优先
-	}
 	secret := string(c.Message.Body())
 	if secret == "" {
 		return values.Error("secret empty")
@@ -257,7 +244,7 @@ func (this *TcpServer) proxy(c *cosnet.Context) any {
 		return err
 	}
 	ctx := SocketRequest{Context: c}
-	reply, err := proxyRequest(&ctx, path)
+	reply, err := Forward(&ctx, path)
 	if err != nil {
 		return err
 	}

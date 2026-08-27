@@ -4,8 +4,24 @@ import (
 	"github.com/hwcer/cosgo/binder"
 )
 
+// 微服务名。**定义在这里而不是业务框架层**：网关要按服务名做路由与转发
+// （如心跳补服务名前缀），却不能反向依赖 yyds——那会形成 gateway ← yyds 的循环。
+// yyds/options 保留同名常量指向这里，业务层原有引用不受影响。
 const (
-	ServiceName             = "gate"
+	ServiceTypeGate    = "gate"    //网关
+	ServiceTypeGame    = "game"    //游戏服
+	ServiceTypeWorld   = "world"   //世界服
+	ServiceTypeBattle  = "battle"  //战斗服
+	ServiceTypeRooms   = "rooms"   //游戏大厅
+	ServiceTypeSocial  = "social"  //社交用户中心
+	ServiceTypeLocator = "locator" //角色定位中心
+)
+
+// Deprecated: 用 ServiceTypeGate。它与上面那组是同一类东西(微服务名)，
+// 只是历史上单独起了个名字、放在了另一个块里，新代码别再用。
+const ServiceName = ServiceTypeGate
+
+const (
 	MessageSend             = "send"
 	MessageWrite            = "write"
 	MessageBroadcast        = "broadcast"

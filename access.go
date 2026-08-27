@@ -58,7 +58,7 @@ func (this *access) oauth(r Request, req values.Metadata) (p *session.Data, err 
 }
 
 // None 普通接口
-// SocketId 由 proxyRequest 统一下发（所有档位一致），这里不再单独塞
+// SocketId 由 Forward 统一下发（所有档位一致），这里不再单独塞
 func (this *access) None(r Request, req values.Metadata, isMaster bool) (p *session.Data, err error) {
 	req[gwcfg.ServiceMetadataAddress] = r.RemoteAddr()
 	return
