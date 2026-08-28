@@ -35,15 +35,12 @@ var Headers = []string{
 }
 
 // NewHttpServer 创建HTTP服务器实例
-// 返回值:
-//   - *HttpServer: HTTP服务器实例
 func NewHttpServer() *HttpServer {
 	s := &HttpServer{}
 	return s
 }
 
-// HttpServer HTTP服务器结构体
-// 用于处理HTTP短连接请求
+// HttpServer 短连接网关（HTTP）
 type HttpServer struct {
 	*cosweb.Server
 	static *cosweb.Static
@@ -51,8 +48,6 @@ type HttpServer struct {
 
 // init 初始化HTTP服务器
 // 设置跨域、注册服务和序列化器
-// 返回值:
-//   - error: 初始化过程中的错误
 func (this *HttpServer) init() (err error) {
 	this.Server = cosweb.New()
 	// 跨域设置
@@ -102,25 +97,12 @@ func (this *HttpServer) wss() error {
 	return nil
 }
 
-// serialize 序列化函数
-// 用于序列化响应数据
-// 参数:
-//   - c: cosweb上下文
-//   - reply: 要序列化的数据
-//
-// 返回值:
-//   - []byte: 序列化后的数据
-//   - error: 序列化过程中的错误
+// serialize cosweb 的回包序列化出口
 func (this *HttpServer) serialize(c *cosweb.Context, reply any) ([]byte, error) {
 	return Setting.Handler.Serialize(c, reply)
 }
 
 // Listen 监听HTTP端口
-// 参数:
-//   - address: 监听地址
-//
-// 返回值:
-//   - error: 监听过程中的错误
 func (this *HttpServer) Listen(address string) (err error) {
 	if gwcfg.Options.Gate.KeyFile != "" && gwcfg.Options.Gate.CertFile != "" {
 		err = this.Server.TLS(address, gwcfg.Options.Gate.CertFile, gwcfg.Options.Gate.KeyFile)
@@ -134,11 +116,6 @@ func (this *HttpServer) Listen(address string) (err error) {
 }
 
 // Accept 接受HTTP连接
-// 参数:
-//   - ln: 监听器
-//
-// 返回值:
-//   - error: 接受连接过程中的错误
 func (this *HttpServer) Accept(ln net.Listener) (err error) {
 	if gwcfg.Options.Gate.KeyFile != "" && gwcfg.Options.Gate.CertFile != "" {
 		err = this.Server.TLS(ln, gwcfg.Options.Gate.CertFile, gwcfg.Options.Gate.KeyFile)
@@ -152,11 +129,6 @@ func (this *HttpServer) Accept(ln net.Listener) (err error) {
 }
 
 // oauth 处理认证请求
-// 参数:
-//   - c: cosweb上下文
-//
-// 返回值:
-//   - any: 认证结果，包含会话密钥
 func (this *HttpServer) oauth(c *cosweb.Context) any {
 	args := Setting.Handler.Token()
 	if err := c.Bind(args); err != nil {
@@ -208,11 +180,6 @@ func (this *HttpServer) C2SHeartbeat(c *cosweb.Context) any {
 }
 
 // proxy 处理HTTP请求代理
-// 参数:
-//   - c: cosweb上下文
-//
-// 返回值:
-//   - any: 代理结果
 func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 	// 创建 http 代理并处理请求
 	ctx := HttpRequest{Context: c}
@@ -223,8 +190,7 @@ func (this *HttpServer) proxy(c *cosweb.Context) (r any) {
 	return reply
 }
 
-// HttpRequest HTTP代理结构体
-// 实现gwcfg.Context接口，用于HTTP请求的代理
+// HttpRequest 短连接的入站请求，实现 context.Context
 type HttpRequest struct {
 	*cosweb.Context
 	body     []byte
@@ -235,13 +201,6 @@ type HttpRequest struct {
 }
 
 // login 登录（gateway 内部）
-// 参数:
-//   - guid: 用户GUID
-//   - value: 登录值
-//
-// 返回值:
-//   - token: 登录令牌
-//   - error: 登录过程中的错误
 func (this *HttpRequest) login(guid string, value values.Values) (token string, err error) {
 	// 顶号处置：三条登录路径 TCP/WSS/HTTP 行为一致，且必须在 Login 之前，理由见 negotiate
 	if err = negotiate(guid, this.Context.RemoteAddr(), nil); err != nil {
@@ -262,23 +221,17 @@ func (this *HttpRequest) login(guid string, value values.Values) (token string, 
 	header := this.Context.Header()
 	header.Set("X-Forwarded-Key", session.Options.Name)
 	header.Set("X-Forwarded-Val", cookie.Value)
-	//this.Context.Set(session.Setting.Name, cookie.Value)
 	//this.cookie = cookie
 	this.Context.Session = session.New(data)
 	return
 }
 
 // logout 登出（gateway 内部）
-// 返回值:
-//   - error: 登出过程中的错误
 func (this *HttpRequest) logout() error {
 	return this.Context.Session.Delete()
 }
 
 // verify 验证会话（gateway 内部）
-// 返回值:
-//   - *session.Data: 会话数据
-//   - error: 验证过程中的错误
 func (this *HttpRequest) verify() (*session.Data, error) {
 	// 如果会话已存在且有效，直接返回
 	if this.Context.Session != nil && this.Context.Session.Data != nil {
@@ -383,8 +336,6 @@ func (this *HttpRequest) Session() *session.Data {
 }
 
 // Metadata 获取请求元数据
-// 返回值:
-//   - values.Metadata: 请求元数据
 func (this *HttpRequest) Metadata() values.Metadata {
 	if this.metadata == nil {
 		// 仅缓存 URL 查询参数解析（静态）
@@ -406,8 +357,6 @@ func (this *HttpRequest) Metadata() values.Metadata {
 }
 
 // RemoteAddr 获取远程地址
-// 返回值:
-//   - string: 远程地址
 func (this *HttpRequest) RemoteAddr() string {
 	return stripPort(this.Context.RemoteAddr())
 }
@@ -454,12 +403,6 @@ func (this *HttpRequest) Flag(set ...message.Flag) message.Flag {
 
 // getContentType 获取内容类型
 // 从请求头中获取指定的内容类型
-// 参数:
-//   - name: 头名称
-//   - split: 分隔符
-//
-// 返回值:
-//   - string: 内容类型
 func (this *HttpRequest) getContentType(name string, split string) string {
 	t := this.Context.Request.Header.Get(name)
 	if t == "" {

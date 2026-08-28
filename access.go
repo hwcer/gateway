@@ -21,7 +21,7 @@ func init() {
 	Access.Register(gwcfg.OAuthTypePlayer, Access.Player)
 }
 
-type accessFunc func(r Request, req values.Metadata, isMaster bool) (*session.Data, error)
+type accessFunc func(r inbound, req values.Metadata, isMaster bool) (*session.Data, error)
 
 type access struct {
 	dict map[gwcfg.OAuthType]accessFunc
@@ -33,7 +33,7 @@ func (this *access) Register(l gwcfg.OAuthType, f accessFunc) {
 	}
 	this.dict[l] = f
 }
-func (this *access) Verify(c Request, req values.Metadata, servicePath, serviceMethod string) (*session.Data, error) {
+func (this *access) Verify(c inbound, req values.Metadata, servicePath, serviceMethod string) (*session.Data, error) {
 	l, s := gwcfg.Authorize.Get(servicePath, serviceMethod)
 	isMaster := gwcfg.Authorize.IsMaster(s)
 	f, ok := this.dict[l]
@@ -48,7 +48,7 @@ func (this *access) Verify(c Request, req values.Metadata, servicePath, serviceM
 	return p, nil
 }
 
-func (this *access) oauth(r Request, req values.Metadata) (p *session.Data, err error) {
+func (this *access) oauth(r inbound, req values.Metadata) (p *session.Data, err error) {
 	if p, err = r.verify(); err != nil {
 		return nil, err
 	} else if p == nil {
@@ -59,13 +59,13 @@ func (this *access) oauth(r Request, req values.Metadata) (p *session.Data, err 
 
 // None 普通接口
 // SocketId 由 Forward 统一下发（所有档位一致），这里不再单独塞
-func (this *access) None(r Request, req values.Metadata, isMaster bool) (p *session.Data, err error) {
+func (this *access) None(r inbound, req values.Metadata, isMaster bool) (p *session.Data, err error) {
 	req[gwcfg.ServiceMetadataAddress] = r.RemoteAddr()
 	return
 }
 
 // OAuth 账号登录
-func (this *access) OAuth(r Request, req values.Metadata, needMaster bool) (p *session.Data, err error) {
+func (this *access) OAuth(r inbound, req values.Metadata, needMaster bool) (p *session.Data, err error) {
 	if p, err = this.oauth(r, req); err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (this *access) OAuth(r Request, req values.Metadata, needMaster bool) (p *s
 // 自带 GUID。但**没有玩家容器的服务**(社交服等)只能走 Context.Send 的另一条分支,
 // 那条分支拿不到 GUID/SocketId 就直接丢弃并打 Alert —— 表现是"接口调通了、
 // 客户端什么也没收到",而且只有翻日志才看得见。
-func (this *access) Player(r Request, req values.Metadata, needDeveloper bool) (p *session.Data, err error) {
+func (this *access) Player(r inbound, req values.Metadata, needDeveloper bool) (p *session.Data, err error) {
 	if p, err = this.oauth(r, req); err != nil {
 		return nil, err
 	}

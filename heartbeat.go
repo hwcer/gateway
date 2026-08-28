@@ -27,14 +27,9 @@ func heartbeat(c context.Context) any {
 	}
 	p := c.Session() //GetString 不是 nil-safe,必须先判空
 	if Setting.G2SHeartbeat != "" && p != nil && p.GetString(gwcfg.ServiceMetadataUID) != "" {
-		res := values.Metadata{}
-		reply, err := Forward(c, Setting.G2SHeartbeat, res)
+		reply, err := Forward(c, Setting.G2SHeartbeat)
 		if err == nil {
-			//回包直接发给客户端，要和代理路径一样过 Response 钩子，理由见 response
-			var b []byte
-			if b, err = response(c, Setting.G2SHeartbeat, reply, res); err == nil {
-				return b
-			}
+			return reply //Response 已由 Forward 过完
 		}
 		logger.Debug("心跳转发失败,path:%v,err:%v", Setting.G2SHeartbeat, err)
 	}

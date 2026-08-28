@@ -18,9 +18,6 @@ import (
 	"github.com/hwcer/logger"
 )
 
-// NewTCPServer 创建TCP服务器实例
-// 返回值:
-//   - *TcpServer: TCP服务器实例
 func NewTCPServer() *TcpServer {
 	s := &TcpServer{}
 	// 独占实例，不用 cosnet.Default：网关会对所持实例做全局性动作（关心跳计时器、
@@ -32,17 +29,12 @@ func NewTCPServer() *TcpServer {
 	return s
 }
 
-// TcpServer TCP服务器结构体
-// 用于处理TCP长连接请求
+// TcpServer 长连接网关。TCP 与 WSS 共用它（见 Module.Init），所以 WSS 不必单独实现一套。
 type TcpServer struct {
 	*cosnet.Sockets
-	//Errorf func(*cosnet.Context, error) any
 }
 
-// init 初始化TCP服务器
-// 设置心跳管理、事件回调和服务注册
-// 返回值:
-//   - error: 初始化过程中的错误
+// init 注册事件回调与内置路由（认证/心跳/重连），并把各业务服的路由前缀挂上代理
 func (this *TcpServer) init() error {
 	session.On(session.EventHeartbeat, this.heartbeat)
 
@@ -74,25 +66,12 @@ func (this *TcpServer) init() error {
 	return this.Sockets.Start()
 }
 
-// serialize 序列化函数
-// 用于序列化响应数据
-// 参数:
-//   - c: cosnet上下文
-//   - reply: 要序列化的数据
-//
-// 返回值:
-//   - []byte: 序列化后的数据
-//   - error: 序列化过程中的错误
+// serialize cosnet 的回包序列化出口
 func (this *TcpServer) serialize(c *cosnet.Context, reply any) ([]byte, error) {
 	return Setting.Handler.Serialize(c, reply)
 }
 
 // Listen 监听TCP端口
-// 参数:
-//   - address: 监听地址
-//
-// 返回值:
-//   - error: 监听过程中的错误
 func (this *TcpServer) Listen(address string) error {
 	_, err := this.Sockets.Listen(address)
 	if err == nil {
@@ -110,11 +89,6 @@ func (this *TcpServer) heartbeat(i any) {
 }
 
 // Accept 接受TCP连接
-// 参数:
-//   - ln: 监听器
-//
-// 返回值:
-//   - error: 接受连接过程中的错误
 func (this *TcpServer) Accept(ln net.Listener) error {
 	this.Sockets.Accept(&tcp.Listener{Listener: ln})
 	logger.Trace("网关长连接启动：%v", gwcfg.Options.Gate.Address)
@@ -127,11 +101,6 @@ func (this *TcpServer) C2SHeartbeat(c *cosnet.Context) any {
 }
 
 // C2SOAuth 处理认证请求
-// 参数:
-//   - c: cosnet上下文
-//
-// 返回值:
-//   - any: 认证结果
 func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	args := Setting.Handler.Token()
 	if err := c.Bind(args); err != nil {
@@ -142,24 +111,20 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 	if err != nil {
 		return err
 	}
-	// 创建 socket 代理并登录
-	ctx := SocketRequest{Context: c}
-	vs := values.Values{}
+	developer := 0
 	if data.Developer {
-		vs.Set(gwcfg.ServiceMetadataDeveloper, 1)
-	} else {
-		vs.Set(gwcfg.ServiceMetadataDeveloper, 0)
+		developer = 1
 	}
-	var s string
-	if s, err = ctx.login(data.Openid, vs); err != nil {
+	ctx := SocketRequest{Context: c}
+	secret, err := ctx.login(data.Openid, values.Values{gwcfg.ServiceMetadataDeveloper: developer})
+	if err != nil {
 		return err
 	}
-
 	if Setting.G2SOAuth == "" {
-		return nil
+		return nil //不需要业务服确认,登录到此为止
 	}
-	//将秘钥 传给 业务服务器由业务层决定要不要在确认包中返回给客户端
-	ctx.SetMetadata(gwcfg.ServicePlayerCookie, s)
+	//秘钥交给业务服,由它决定要不要在确认包里回给客户端
+	ctx.SetMetadata(gwcfg.ServicePlayerCookie, secret)
 	ctx.body = []byte{} //oauth 路径显式置空，业务层未设置时也不回退到客户端凭据报文
 	if err = args.GetValues(data, &ctx); err != nil {
 		return err
@@ -172,9 +137,6 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 }
 
 // S2CSecret 登录成功后下发秘钥（转交 Setting.Handler，默认 Default 以 JSON 下发）
-// 参数:
-//   - sock: cosnet socket
-//   - _: 事件数据（未使用）
 func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	data := sock.Data()
 	if data == nil {
@@ -190,9 +152,6 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 }
 
 // S2CReplaced 有人请求顶号时下发协商提示（转交 Setting.Handler，默认 Default 以 JSON 下发）
-// 参数:
-//   - sock: cosnet socket（进入协商期的老连接）
-//   - i: 事件数据 *cosnet.Replaced，含顶号方 IP 与协商剩余秒数
 func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if sock == nil {
 		return
@@ -210,9 +169,6 @@ func (this *TcpServer) C2SReconnect(c *cosnet.Context) any {
 }
 
 // Disconnect 处理断开连接事件
-// 参数:
-//   - sock: cosnet socket
-//   - _: 事件数据（未使用）
 func (this *TcpServer) Disconnect(sock *cosnet.Socket, _ any) {
 	if err := players.Disconnect(sock); err != nil {
 		logger.Alert("Disconnect error:%v", err)
@@ -220,11 +176,6 @@ func (this *TcpServer) Disconnect(sock *cosnet.Socket, _ any) {
 }
 
 // proxy 处理TCP请求代理
-// 参数:
-//   - c: cosnet上下文
-//
-// 返回值:
-//   - any: 代理结果
 func (this *TcpServer) proxy(c *cosnet.Context) any {
 	path, _, err := c.Path()
 	if err != nil {
@@ -249,9 +200,6 @@ type SocketRequest struct {
 }
 
 // verify 验证会话（gateway 内部）
-// 返回值:
-//   - *session.Data: 会话数据
-//   - error: 验证过程中的错误
 func (this *SocketRequest) verify() (*session.Data, error) {
 	data := this.Context.Socket.Data()
 	if data == nil {
@@ -261,13 +209,6 @@ func (this *SocketRequest) verify() (*session.Data, error) {
 }
 
 // login 登录（gateway 内部）
-// 参数:
-//   - guid: 用户GUID
-//   - value: 登录值
-//
-// 返回值:
-//   - token: 登录令牌
-//   - error: 登录过程中的错误
 func (this *SocketRequest) login(guid string, value values.Values) (token string, err error) {
 	sock := this.Context.Socket
 	data := sock.Data()
@@ -289,8 +230,6 @@ func (this *SocketRequest) login(guid string, value values.Values) (token string
 }
 
 // logout 登出（gateway 内部）
-// 返回值:
-//   - error: 登出过程中的错误
 func (this *SocketRequest) logout() error {
 	this.Context.Socket.Close()
 	return nil
@@ -307,8 +246,6 @@ func (this *SocketRequest) Session() *session.Data {
 }
 
 // Socket 获取socket
-// 返回值:
-//   - *cosnet.Socket: cosnet socket
 func (this *SocketRequest) Socket() *cosnet.Socket {
 	return this.Context.Socket
 }
@@ -361,8 +298,6 @@ func (this *SocketRequest) Header() map[string]string {
 }
 
 // Metadata 获取请求元数据
-// 返回值:
-//   - values.Metadata: 请求元数据
 func (this *SocketRequest) Metadata() values.Metadata {
 	if this.metadata == nil {
 		// 静态字段缓存一次：查询参数 + RequestId
@@ -387,8 +322,6 @@ func (this *SocketRequest) Metadata() values.Metadata {
 }
 
 // RemoteAddr 获取远程地址
-// 返回值:
-//   - string: 远程地址
 func (this *SocketRequest) RemoteAddr() string {
 	return stripPort(this.Context.RemoteAddr().String())
 }

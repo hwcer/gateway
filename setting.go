@@ -43,6 +43,9 @@ type Accept interface {
 //
 // 参数是协议无关的 context.Context（不是 *cosnet.Context）——**短连接也有心跳保活**，
 // 长短连接共用同一个钩子。要转发到后端服务时直接把它交给 gateway.Forward 即可。
+//
+// ⚠️ 实现了它就等于**接管了这个包**：返回值网关原样交回，不会替你过 Response。
+// 想要后处理，要么在钩子里自己做，要么把活儿交给 Forward（它会走完整周期）。
 type C2SHeartbeat interface {
 	C2SHeartbeat(c context.Context) any
 }
@@ -51,24 +54,43 @@ type C2SHeartbeat interface {
 //
 // 参数同样是协议无关的 context.Context：网关默认实现要绑定 socket、短连接走不通，
 // 需要 HTTP 也支持重连时由业务层自己定义语义（比如只验 secret、只回 handledIndex）。
+//
+// ⚠️ 同 C2SHeartbeat：实现了就等于接管这个包，返回值网关原样交回、不替你过 Response。
+// 周期规则见 Response 的说明。
 type C2SReconnect interface {
 	C2SReconnect(c context.Context) any
+}
+
+// Request 可选接口：业务 Handler 实现则在**转发前**做预处理（如解密、改包体）。
+// 未实现时原样转发。
+//
+// servicePath / serviceMethod 是已解析好的后端路由，想按目标服分流（如只对 G2SOAuth
+// 做特殊处理）直接用即可，不必自己再解析一遍 path。
+type Request interface {
+	Request(c context.Context, servicePath, serviceMethod string) error
 }
 
 // Response 可选接口：业务 Handler 实现则在回包/推送前做后处理（如加密、改包、改 flag）。
 // 未实现时网关原样返回，且不再构造响应上下文（socketContext/resFlag）。
 //
-// ⚠️⚠️ **Response 与 Serialize 是互斥的两条路，不是一前一后**。cosnet 的 handler.reply
-// 按 handler 返回值类型分流，一份数据只会经过其中一条：
+// # 钩子的周期
 //
-//	返回 []byte           → 直接发，只过 Response（代理回包、心跳转发、推送、广播）
-//	返回其它任意类型       → 先过 Serialize 再发，**不过 Response**（心跳降级的时间戳、
-//	                        断线重连的 handledIndex，以及业务 handler 的常规返回值）
+// 一条原则：**凡是转发回来的数据，一律走完整周期**（Request → RPC → Response）。
+// 由 Forward 统一收口，调用方什么都不用管——代理转发、G2SOAuth、心跳转发都在此列。
 //
-// 所以**加密这类后处理必须在两处都做**，只写一处就会有一类包是裸的，而且很难发现：
-// 客户端大部分包解得开，偏偏心跳或重连解不开。
+// 没有转发的那几类，各归各的：
+//
+//	业务 Handler 实现 C2SHeartbeat / C2SReconnect 后返回的结果
+//	    **由业务层自己负责**。网关原样交回，不替它加工——想让这类包也过后处理，
+//	    在钩子里自己走一遍，或者干脆改走 Forward。
+//	网关默认实现就地应答的（心跳时间戳、重连 handledIndex）
+//	    **原样返回**，只经过 cosnet 的 serialize 出口。想统一，就实现上面那两个钩子接管它。
+//	业务 handler 的常规回包
+//	    走 cosnet 的 serialize 出口，不经过网关。要后处理只能写在 Serialize 里。
+//
+// servicePath / serviceMethod 是已解析好的后端路由；推送与广播没有后端路由，那两处传空。
 type Response interface {
-	Response(c context.Context) error
+	Response(c context.Context, servicePath, serviceMethod string) error
 }
 
 // 顶号/秘钥下发的默认包名（Default 实现用 MagicNumberPathJson 以 JSON 直接下发）
@@ -81,7 +103,6 @@ const (
 type Handler interface {
 	Token() token.Token                                                                     //登录（C2SOAuth）Token
 	Router(path string, req values.Metadata) (servicePath, serviceMethod string, err error) //路由处理规则
-	Request(c context.Context) error                                                        //转发前预处理(如解密)，默认原样返回；可直接交给 Forward
 	Serialize(accept Accept, reply any) ([]byte, error)                                     //响应序列化
 
 	// 以下两个是**长连接特有**，参数是 *cosnet.Socket 而不是 context.Context：
@@ -138,11 +159,6 @@ func (Default) Router(path string, req values.Metadata) (servicePath, serviceMet
 	servicePath = registry.Formatter(path[0:i])
 	serviceMethod = registry.Formatter(path[i:])
 	return
-}
-
-// Request 默认不处理，原样转发
-func (Default) Request(c context.Context) error {
-	return nil
 }
 
 // Serialize 默认序列化

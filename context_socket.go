@@ -6,6 +6,7 @@ import (
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
 	"github.com/hwcer/cosnet/message"
+	"github.com/hwcer/gateway/context"
 )
 
 // socketContext 是 context.Context 的"脱离入站请求"实现：
@@ -22,11 +23,27 @@ type socketContext struct {
 	header map[string]string
 }
 
-func newSocketContext(sock *cosnet.Socket, data *session.Data, path string, index int32, body []byte, flag message.Flag, meta values.Metadata) *socketContext {
+// newSocketContext 从**入站请求**派生响应上下文：sock / session / index / path 都在 c 上，
+// 不必逐个传；只有响应侧才有的东西（body / flag / meta）单独给。
+//
+// path 取的是 c.Path()——proxyRequest 转发前已经把**转发目标**写进去了（c.Path(path)），
+// 业务钩子按目标服分流靠的就是它。别改成拿 servicePath/serviceMethod 拼：业务层的 Router
+// 不保证可逆，项目里带分区号的路径解析后 servicePath 会被替换成服务名，拼不回原样。
+func newSocketContext(c context.Context, body []byte, flag message.Flag, meta values.Metadata) *socketContext {
+	r := newSenderContext(c.Socket(), c.Path(), body, flag, meta)
+	r.data = c.Session()
+	r.index = c.Index()
+	return r
+}
+
+// newSenderContext 从**一条连接**构造推送上下文：推送与广播手里根本没有入站请求，
+// 也就没有 session 与包序号可言（Session() 会自动回落到 sock.Data()）。
+// sock 为 nil 即广播——不针对任何一条具体连接。
+func newSenderContext(sock *cosnet.Socket, path string, body []byte, flag message.Flag, meta values.Metadata) *socketContext {
 	if meta == nil {
 		meta = values.Metadata{}
 	}
-	return &socketContext{sock: sock, data: data, path: path, body: body, flag: flag, index: index, meta: meta}
+	return &socketContext{sock: sock, path: path, body: body, flag: flag, meta: meta}
 }
 
 func (this *socketContext) Path(set ...string) string {

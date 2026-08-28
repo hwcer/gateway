@@ -126,8 +126,8 @@ func deliver(c *cosrpc.Context, sock *cosnet.Socket) any {
 	body := c.Bytes()
 	if h, ok := Setting.Handler.(Response); ok {
 		//data 传 nil 即可:socketContext.Session() 取不到 data 会自动回落 sock.Data()
-		ctx := newSocketContext(sock, nil, path, 0, body, flag, mate)
-		if err := h.Response(ctx); err != nil {
+		ctx := newSenderContext(sock, path, body, flag, mate)
+		if err := h.Response(ctx, "", ""); err != nil {
 			return err
 		}
 		flag = ctx.Flag()
@@ -164,8 +164,8 @@ func broadcast(c *cosrpc.Context) any {
 	var err error
 	body := c.Bytes()
 	if h, ok := Setting.Handler.(Response); ok {
-		ctx := newSocketContext(nil, nil, path, 0, body, flag, mate)
-		if err = h.Response(ctx); err != nil {
+		ctx := newSenderContext(nil, path, body, flag, mate)
+		if err = h.Response(ctx, "", ""); err != nil {
 			return err
 		}
 		flag = ctx.Flag()
