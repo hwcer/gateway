@@ -33,7 +33,11 @@ func heartbeat(c context.Context) any {
 		}
 		logger.Debug("心跳转发失败,path:%v,err:%v", Setting.G2SHeartbeat, err)
 	}
-	return time.Now().UnixMilli()
+	//网关自己应答:回服务器时间戳。与 reconnect 一样用 values.Message{Code,Data} 这个
+	//框架层的通用回包结构,而不是裸数字——业务层的 Serialize 认得出"成功且带数据"。
+	//⚠️ 业务协议若自带时间字段(如本项目 S2CConfirm.Time),这份 Data 是冗余的保底,
+	//客户端优先读那个字段即可。
+	return values.Message{Code: 0, Data: time.Now().UnixMilli()}
 }
 
 // initHeartbeat 启动时校正 Setting.G2SHeartbeat：留空则回落到客户端心跳包名，

@@ -35,5 +35,10 @@ func reconnect(c context.Context) any {
 	if e != nil {
 		return e
 	}
-	return p.GetInt32(gwcfg.ServiceMetadataRequestId)
+	//回"已处理的最大请求号",供客户端对账断线瞬间在飞的业务包。
+	//⚠️ 用 values.Message{Code,Data} 而不是裸 int32:它是框架层表达回包的通用结构
+	//(与客户端 Cosnet 的 IS2CConfirm 同构),业务层的 Serialize 认得出这是"成功且带数据",
+	//裸数字只能靠对方的 default 分支去猜。
+	//也不能返回 []byte —— cosnet 对字节是直接发的、绕过 Serialize,客户端解不出 Code。
+	return values.Message{Code: 0, Data: p.GetInt32(gwcfg.ServiceMetadataRequestId)}
 }
