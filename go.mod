@@ -1,15 +1,15 @@
 module github.com/hwcer/gateway
 
-go 1.25.0
+go 1.26.0
 
 require (
-	github.com/hwcer/cosgo v1.8.3-0.20260622103439-a7f86a5a035e
+	github.com/hwcer/cosgo v1.8.4-0.20260821022652-154e18615e0f
 	github.com/hwcer/cosnet v1.4.5-0.20260827022805-535de6de921f
-	github.com/hwcer/cosrpc v1.4.2-0.20260604075459-f6db8e16b199
-	github.com/hwcer/cosweb v1.4.2-0.20260615102912-5a824bef5f39
-	github.com/hwcer/coswss v0.4.2-0.20260604075347-da9531549f78
-	github.com/hwcer/logger v0.2.8
-	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect
+	github.com/hwcer/cosrpc v1.4.3-0.20260829022637-3056019a1349
+	github.com/hwcer/cosweb v1.4.3-0.20260814024851-f480f70bdd1a
+	github.com/hwcer/coswss v0.4.2
+	github.com/hwcer/logger v0.2.9-0.20260626033726-42e0a5927245
+	go.mongodb.org/mongo-driver/v2 v2.7.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 )
 
@@ -49,7 +49,7 @@ require (
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/miekg/dns v1.1.72 // indirect
-	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
+	github.com/pelletier/go-toml/v2 v2.4.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/quic-go v0.60.0 // indirect
@@ -60,8 +60,7 @@ require (
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/smallnest/quick v0.2.0 // indirect
-	github.com/smallnest/rpcx v1.9.3 // indirect
-	github.com/smallnest/rsocket v0.0.0-20241130031020-4a72eb6ff62a // indirect
+	github.com/smallnest/rpcx v1.9.4 // indirect
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
@@ -94,3 +93,5 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+require github.com/smallnest/gordma v0.3.0 // indirect
