@@ -15,12 +15,13 @@ import (
 // 老连接的处置与策略无关（一律进入"只收不发"的存活期），差别只有新端等不等它，
 // 所以策略判断收在这一个函数里，players 那层只提供不带策略的原语。
 func negotiate(guid, ip string, sock *cosnet.Socket) error {
-	countdown := players.Negotiate(guid, ip, sock)
+	countdown, address := players.Negotiate(guid, ip, sock)
 	if countdown <= 0 {
 		return nil //没有活着的老连接，直接上线
 	}
 	if Setting.ForceReplace {
 		return nil //强制顶号：新端立即接管，老连接把在途回包发完即可
 	}
-	return errors.ErrReplaced(countdown) //协商顶号：本次登录被拒，带上剩余秒数供新端重试
+	//协商顶号：本次登录被拒，带上剩余秒数供新端重试、以及在线端 IP 供客户端提示
+	return errors.ErrReplaced(countdown, address)
 }

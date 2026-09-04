@@ -3,7 +3,7 @@ module github.com/hwcer/gateway
 go 1.26.0
 
 require (
-	github.com/hwcer/cosgo v1.8.4-0.20260821022652-154e18615e0f
+	github.com/hwcer/cosgo v1.8.4-0.20260904100637-05162b06213a
 	github.com/hwcer/cosnet v1.4.5-0.20260827022805-535de6de921f
 	github.com/hwcer/cosrpc v1.4.3-0.20260829022637-3056019a1349
 	github.com/hwcer/cosweb v1.4.3-0.20260814024851-f480f70bdd1a

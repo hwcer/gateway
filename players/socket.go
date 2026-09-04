@@ -21,7 +21,7 @@ func Socket(p *session.Data) *cosnet.Socket {
 	return r
 }
 
-// Negotiate 顶号：通知老连接进入"只收不发"的存活期，返回它的剩余存活秒数。
+// Negotiate 顶号：通知老连接进入"只收不发"的存活期，返回它的剩余存活秒数和它的 IP。
 //
 // 返回 0 表示没有活着的老连接（或就是这条连接自己在重复登录），新端可以直接上线。
 //
@@ -37,23 +37,34 @@ func Socket(p *session.Data) *cosnet.Socket {
 //
 // ⚠️ 在会话锁**外面**调用 os.Replaced：它会 Emit 事件同步走到业务层的下发逻辑，
 // 塞进 p.Mutex 里迟早撞上重入死锁。
-func Negotiate(guid, ip string, sock *cosnet.Socket) int32 {
+func Negotiate(guid, ip string, sock *cosnet.Socket) (countdown int32, address string) {
 	p := Get(guid)
 	if p == nil {
-		return 0 //从没登录过
+		return 0, "" //从没登录过
 	}
 	os := Socket(p)
 	if os == nil || !os.CanWrite() {
-		return 0 //老连接不存在或已经死了(CanWrite 覆盖 Connected|Closing,即"还活着")
+		return 0, "" //老连接不存在或已经死了(CanWrite 覆盖 Connected|Closing,即"还活着")
 	}
 	if os.Is(sock) {
-		return 0 //就是这条连接自己在重复登录
+		return 0, "" //就是这条连接自己在重复登录
 	}
-	if i := strings.Index(ip, ":"); i > 0 {
-		ip = ip[:i]
+	os.Replaced(stripPort(ip)) //已在存活期内则内部返回 false：不重复通知，也不重置倒计时
+
+	//两个方向的 IP 别搞反：传进来的 ip 是**新端**的，发给老连接（"你的账号在 xxx 登录"）；
+	//返回的 address 是**老连接**的，发给被拒的新端（"账号正在 xxx 在线"）。
+	if addr := os.RemoteAddr(); addr != nil {
+		address = stripPort(addr.String())
 	}
-	os.Replaced(ip) //已在存活期内则内部返回 false：不重复通知，也不重置倒计时
-	return os.Countdown()
+	return os.Countdown(), address
+}
+
+// stripPort 去掉 host:port 里的端口，只留 IP。
+func stripPort(addr string) string {
+	if i := strings.Index(addr, ":"); i > 0 {
+		return addr[:i]
+	}
+	return addr
 }
 
 // Replace 把会话绑定到新连接；老连接（若还在）立即进入关闭流程。

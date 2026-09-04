@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/hwcer/cosgo/session"
@@ -120,8 +121,21 @@ func TestNegotiateWaitReplace(t *testing.T) {
 	if msg.Code != session.ErrorSessionReplaced.Code {
 		t.Fatalf("错误码 = %d, want %d", msg.Code, session.ErrorSessionReplaced.Code)
 	}
-	if sec, _ := msg.Data.(int32); sec <= 0 {
-		t.Fatalf("必须带上剩余秒数供新端定时重试,拿到 %v", msg.Data)
+	//🔴 参数走 Args,顺序 [剩余秒数, 在线端IP]。判据落在**值**上：
+	//只断言 len(Args)==2 抓不到"两个 IP 搞反了"这一类退化 —— 发给新端的必须是
+	//老连接的地址,不是新端自己的。
+	if len(msg.Args) != 2 {
+		t.Fatalf("Args = %v, want [剩余秒数, 在线端IP]", msg.Args)
+	}
+	if sec := values.ParseInt32(msg.Args[0]); sec <= 0 {
+		t.Fatalf("必须带上剩余秒数供新端定时重试,拿到 %v", msg.Args[0])
+	}
+	wantIP := os.RemoteAddr().String()
+	if i := strings.Index(wantIP, ":"); i > 0 {
+		wantIP = wantIP[:i]
+	}
+	if got, _ := msg.Args[1].(string); got != wantIP {
+		t.Fatalf("在线端IP = %q, want %q(老连接的地址,不是新端自己的)", got, wantIP)
 	}
 	//🔴 关键:会话不能被换走。换走了就会出现"推送投给新连接、确认包丢在老连接"的割裂
 	if p := players.Get("guid-wait"); p == nil || !players.Socket(p).Is(os) {
