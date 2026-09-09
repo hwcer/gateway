@@ -39,9 +39,12 @@ func write(c *cosrpc.Context) any {
 
 // send 消息推送。
 //
-// **定位目标连接：socketId 与 GUID 二选一，socketId 优先**（见 resolveTarget）。
-// 带 GUID 才有会话，登出标记 / uid 校验 / cookies 更新都挂在会话上；只带 socketId 的
-// 那种（典型是登录接口本身，那时还没有会话）直接投给那条连接。
+// **定位优先级：socketId > GUID > UID**。socketId 定位连接（见 resolveTarget）；
+// 会话定位在本函数：GUID 直查会话表，定位不到或只有 UID 时经全局映射反查 GUID
+// （长链接绑定的是 GUID，一个账号可能有多个角色，映射保证落在当前在线的角色上）。
+// 按 GUID 定位到会话且带了 UID 时会用 UID 校验归属——顶号/换角后同一 GUID 上挂的
+// 可能已经是另一个 uid，不校验就是发错人；只带 socketId 的那种（典型是登录接口
+// 本身，那时还没有会话）直接投给那条连接。
 func send(c *cosrpc.Context) any {
 	uid := c.GetMetadata(gwcfg.ServiceMetadataUID)
 	guid := c.GetMetadata(gwcfg.ServiceMetadataGUID)
@@ -59,6 +62,10 @@ func send(c *cosrpc.Context) any {
 	var p *session.Data
 	if guid != "" {
 		p = players.Get(guid)
+	}
+	if p == nil && uid != "" {
+		//UID 反查:优先级排在 GUID 之后,定位不到会话再经全局映射换算
+		p = players.Get(players.GUID(uid))
 	}
 	if p != nil {
 		//顶号/换角色后同一 GUID 上挂的可能已经是另一个 uid,不校验就是发错人
@@ -84,9 +91,10 @@ func send(c *cosrpc.Context) any {
 	return deliver(c, sock)
 }
 
-// resolveTarget 定位推送目标：**socketId 与 GUID 二选一，socketId 优先**。
+// resolveTarget 定位推送目标连接：**socketId 与会话二选一，socketId 优先**。
+// （会话本身由 send 按 GUID/UID 定位，UID 走全局映射反查；这里只管"会话 → 连接"）
 //
-//	p        按 GUID 找到的会话，可为 nil
+//	p        按 GUID/UID 找到的会话，可为 nil
 //	socketId 发起这次请求的连接 id，0 表示"不是请求驱动的推送"
 //
 // 规则背后是一条不变量：**请求驱动的推送必须回到发起它的那条连接**。

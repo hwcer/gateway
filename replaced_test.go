@@ -9,6 +9,7 @@ import (
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
 	"github.com/hwcer/cosnet/tcp"
+	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 )
 
@@ -212,6 +213,33 @@ func TestResolveTargetByGuid(t *testing.T) {
 	}
 	if resolveTarget(nil, 0) != nil {
 		t.Fatal("两者都没有时应丢弃")
+	}
+}
+
+// TestResolveTargetByUID 只有UID时经 UID->GUID 全局映射反查定位会话
+// （定位优先级 socketId > GUID > UID，见 send）。
+func TestResolveTargetByUID(t *testing.T) {
+	ss := newTestSockets()
+	sock, stop := newReplacedTestSocket(t, ss)
+	defer stop()
+
+	guid := "guid-by-uid"
+	//登录值带uid:Login 会顺带建立 UID->GUID 映射
+	if _, err := players.Connect(sock, guid, values.Values{gwcfg.ServiceMetadataUID: "3001"}); err != nil {
+		t.Fatalf("login error:%v", err)
+	}
+	defer players.Delete(players.Get(guid))
+
+	//UID 反查链路:UID -> GUID -> 会话 -> 连接
+	p := players.Get(players.GUID("3001"))
+	if p == nil {
+		t.Fatal("UID 反查映射未建立")
+	}
+	if got := resolveTarget(p, 0); got == nil || !got.Is(sock) {
+		t.Fatal("按 UID 定位会话后应投给其当前连接")
+	}
+	if players.GUID("9999") != "" {
+		t.Fatal("不在线的UID不应有映射")
 	}
 }
 
