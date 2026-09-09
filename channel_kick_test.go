@@ -6,6 +6,7 @@ import (
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/gateway/channel"
+	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 )
@@ -117,6 +118,37 @@ func TestPlayersUIDMapping(t *testing.T) {
 	players.Delete(pb)
 	if g := players.GUID("2002"); g != "" {
 		t.Fatalf("下线后映射未解绑, GUID(2002)=%s", g)
+	}
+}
+
+// 频道命令统一编码:key = 前缀 + ["name","value"],value 仅 Kick 携带被踢UID。
+// 覆盖 CookiesUpdate 对三种命令的解析与执行
+func TestCookiesUpdateChannelCommands(t *testing.T) {
+	p := newKickTestPlayer(t, "guid-cookie", "6001")
+	defer players.Delete(p)
+
+	name, value := "cookietest", "r1"
+	joinKey := gwcfg.ServicePlayerChannelJoin + context.ChannelNameEncode(name, value)
+	leaveKey := gwcfg.ServicePlayerChannelLeave + context.ChannelNameEncode(name, value)
+	kickKey := gwcfg.ServicePlayerChannelKick + context.ChannelNameEncode(name, value)
+
+	CookiesUpdate(values.Metadata{joinKey: ""}, p, 0)
+	if n := channelMemberCount(name, value); n != 1 {
+		t.Fatalf("join后成员数=%d, want 1", n)
+	}
+
+	CookiesUpdate(values.Metadata{kickKey: "6001"}, p, 0)
+	if n := channelMemberCount(name, value); n != 0 {
+		t.Fatalf("kick后成员数=%d, want 0", n)
+	}
+
+	channel.Join(p, name, value)
+	CookiesUpdate(values.Metadata{leaveKey: ""}, p, 0)
+	if n := channelMemberCount(name, value); n != 0 {
+		t.Fatalf("leave后成员数=%d, want 0", n)
+	}
+	if _, ok := channel.NewSetter(p).Get(name); ok {
+		t.Fatalf("leave后会话频道记录未清理")
 	}
 }
 

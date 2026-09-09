@@ -38,23 +38,26 @@ type Channel struct {
 	Context
 }
 
+// metadata 频道命令统一编码:key = 命令前缀 + ["name","value"],频道身份由key表达;
+// value 仅 Kick 使用(被踢玩家UID),Join/Leave 为空
+func (this *Channel) metadata(prefix, name, value string) string {
+	return strings.Join([]string{prefix, ChannelNameEncode(name, value)}, "")
+}
+
 // Join 加入频道
 func (this *Channel) Join(name, value string) {
-	s := strings.Join([]string{gwcfg.ServicePlayerChannelJoin, name}, "")
-	this.SetMetadata(s, value)
+	this.SetMetadata(this.metadata(gwcfg.ServicePlayerChannelJoin, name, value), "")
 }
 
 // Leave  退出频道
 func (this *Channel) Leave(name, value string) {
-	s := strings.Join([]string{gwcfg.ServicePlayerChannelLeave, name}, "")
-	this.SetMetadata(s, value)
+	this.SetMetadata(this.metadata(gwcfg.ServicePlayerChannelLeave, name, value), "")
 }
 
 // Kick 将指定玩家踢出频道,uid 为被踢玩家的角色ID
 // 与 Join/Leave 一样挂在请求者响应 metadata 上,由网关在回包时执行
 func (this *Channel) Kick(name, value string, uid string) {
-	s := strings.Join([]string{gwcfg.ServicePlayerChannelKick, name}, "")
-	this.SetMetadata(s, ChannelNameEncode(value, uid))
+	this.SetMetadata(this.metadata(gwcfg.ServicePlayerChannelKick, name, value), uid)
 }
 
 // Broadcast  频道广播
