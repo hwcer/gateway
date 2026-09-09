@@ -15,7 +15,16 @@ import (
 func init() {
 	Register(&channelHandle{}, "channel", "%m")
 	channel.SendMessage = func(p *session.Data, path string, data []byte) {
-		if sock := players.Socket(p); sock != nil {
+		//房间成员表存的是入房那刻的会话实例:Redis 后端重连会从存储还原出新实例,
+		//旧实例上的 socket 已死。按 uid 从会话表定位**当前**持有者再取 socket,
+		//查不到(未选角/刚下线)才退回实例自带的 socket。
+		sock := players.Socket(p)
+		if uid := p.GetString(gwcfg.ServiceMetadataUID); uid != "" {
+			if cur := players.Get(uid); cur != nil {
+				sock = players.Socket(cur)
+			}
+		}
+		if sock != nil {
 			flag := message.FlagBroadcast
 			_ = sock.Send(flag, 0, path, data)
 		}

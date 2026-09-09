@@ -51,42 +51,51 @@ func Update(p *session.Data, vs values.Values) {
 	if p == nil || len(vs) == 0 {
 		return
 	}
-	old := p.GetString(gwcfg.ServiceMetadataUID)
-	p.Update(vs)
-	rebind(p, old)
+	//old/uid 成对读进同一把锁:同会话并发的两次换角不会拿到错位的基线
+	var old, uid string
+	p.Mutex(func(setter session.Setter) {
+		old = setter.GetString(gwcfg.ServiceMetadataUID)
+		setter.Update(vs)
+		uid = setter.GetString(gwcfg.ServiceMetadataUID)
+	})
+	if uid != old {
+		rebind(p, old, uid)
+	}
 }
 
-// rebind uid 变化(首次选角/换角)时维护会话表。
+// rebind uid 变化(首次选角/换角)时维护会话表。uid 由调用方在会话锁内读好传入。
 //
 // 表键=uid,一个角色同一时间只允许一个在线会话:新 uid 已被别的会话占着时,
 // 本会话**接管**(supersede 老会话)。这就是 UID 级顶号,触发点是选角回包落地——
 // 网关不解析协议体,选角之前无从知道目标角色,所以登录阶段不可能做占用判断。
 //
-// 推送/响应的 metadata 反复携带同一 uid 是常态(uid==oldUID 的快路径必须零成本)。
-func rebind(p *session.Data, oldUID string) {
-	uid := p.GetString(gwcfg.ServiceMetadataUID)
-	if uid == oldUID {
-		return
-	}
-	//接管:目标角色已在别的会话上在线(同账号另一台设备,或断线期间被顶)
+// 推送/响应的 metadata 反复携带同一 uid 是常态,uid 未变的快路径在 Update 的
+// 锁内就地短路,走不到这里。
+func rebind(p *session.Data, oldUID, uid string) {
+	//先原子换入表项,再处置被挤出的会话:
+	//  - 换入到处置完成之间,按 uid 的推送已经落在新会话上,不会多指向老会话一小段;
+	//  - supersede 里的 sock.Replaced 会同步 Emit 走业务下发,期间表项必须已是新会话;
+	//  - 并发抢同一 uid 的两次接管由 Swap 天然仲裁:后入者赢,先入者作为被挤出方处置,
+	//    不会出现"两个会话都自认为持有角色"的窗口。
+	var displaced *session.Data
 	if uid != "" {
-		if v, ok := players.Load(uid); ok {
-			if os, _ := v.(*session.Data); os != nil && os != p {
-				supersede(os, uid, p)
+		if prev, loaded := players.Swap(uid, p); loaded {
+			//同会话的不同实例不算被挤出(Redis 后端每次 Verify 都从存储新建副本,
+			//重连即此形态):这是同一个客户端自己回来,老副本等着废弃即可,
+			//不许 Replaced 自己、也不许清自己的 uid 与频道身份
+			if os, _ := prev.(*session.Data); os != nil && !os.Is(p) {
+				displaced = os
 			}
 		}
 	}
 	if oldUID != "" {
-		//归属校验后才摘旧键:被接管过的会话 uid 已清空走不到这里,
-		//同一 uid 短暂归属过别的会话时也不能误摘别人的表项
-		if v, ok := players.Load(oldUID); ok && v == p {
-			players.Delete(oldUID)
-		}
+		//归属校验的原子版:只有表项仍指向本会话才摘,不能误摘别人的表项
+		players.CompareAndDelete(oldUID, p)
 		//旧角色的频道身份一并清理,否则换角后旧频道的广播还会推给新角色
 		channel.SwitchUID(p, oldUID)
 	}
-	if uid != "" {
-		players.Store(uid, p)
+	if displaced != nil {
+		supersede(displaced, uid, p)
 	}
 }
 
@@ -97,11 +106,12 @@ func rebind(p *session.Data, oldUID string) {
 // ② 清掉 uid 与频道身份——它随后的 Disconnect/Release 不再以这个角色行动:
 //    掉线通知因 uid 为空自然跳过,也不会误删新会话刚接手的频道成员。
 //
-// 老会话的表项不用显式摘:它的键就是这个 uid,马上被新会话覆盖。
-// ⚠️ Redis 后端分歧:此处对 values 的修改只落在内存副本、不写穿存储(Session 层
-// dirty-key 机制才写穿)。于是被接管会话的存储里 uid 仍在——它持 secret 重连会
-// 还原出带 uid 的副本并经 rebind 重新夺回角色(顶掉接管者,"后回来的秘钥赢")。
-// 内存后端无此分歧:uid 清掉就是存储里那份,重连落地为未选角(TestReconnectAfterTakeover)。
+// 老会话的表项不用显式摘:rebind 的 Swap 已经把它换成了新会话。
+// uid 清除必须**写穿存储**(Session 层脏键机制,存空串与删除等价):Redis 后端
+// 每次 Verify 都从存储新建副本,只改内存的话被接管会话的存储里 uid 仍在,
+// 它持 secret 重连会还原出带 uid 的副本并经 rebind 重新夺回角色,与内存后端
+// 相悖(内存后端单实例,改内存即改存储)。内存后端的 Storage.Update 是 no-op,
+// 行语义不变。
 // ⚠️ 本函数运行时**不持有任何会话锁**(sock.Replaced 会同步 Emit 走业务下发逻辑,
 // 塞进 p.Mutex 里迟早撞上重入死锁,与旧 negotiate 的约束一致)。
 func supersede(old *session.Data, uid string, neo *session.Data) {
@@ -112,9 +122,9 @@ func supersede(old *session.Data, uid string, neo *session.Data) {
 		}
 		sock.Replaced(ip)
 	}
-	old.Mutex(func(setter session.Setter) {
-		setter.Delete(gwcfg.ServiceMetadataUID)
-	})
+	ss := session.New(old)
+	ss.Update(values.Values{gwcfg.ServiceMetadataUID: ""})
+	ss.Release()
 	channel.SwitchUID(old, uid)
 }
 
@@ -142,11 +152,10 @@ func Delete(p *session.Data) bool {
 	if p == nil {
 		return false
 	}
-	//只有表项仍指向本会话才摘:换角/被接管后同一uid可能已归属别的会话,不能误摘
+	//只有表项仍指向本会话才摘(原子归属校验):换角/被接管后同一uid可能已归属
+	//别的会话,不能误摘
 	if uid := p.GetString(gwcfg.ServiceMetadataUID); uid != "" {
-		if v, ok := players.Load(uid); ok && v == p {
-			players.Delete(uid)
-		}
+		players.CompareAndDelete(uid, p)
 	}
 	sock := Socket(p)
 	if sock != nil {

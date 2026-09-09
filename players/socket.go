@@ -84,10 +84,10 @@ func Reconnect(sock *cosnet.Socket, secret string) (data *session.Data, err erro
 	Replace(data, sock)
 	//会话已选角的要重新入表:存储还原的对象与表里的可能是两个实例(Redis 后端每次
 	//Verify 都新建对象),内存后端下则是同一实例、表项本就在——rebind 幂等。
-	//若断线期间角色已被接管,本会话的 uid 已被 supersede 清空,这里自然跳过:
+	//若断线期间角色已被接管,本会话的 uid 已被 supersede 清空(含存储),这里自然跳过:
 	//重连落地为未选角状态,夺回角色须走重新选角的占用判定,而非秘钥说了算。
 	if uid := data.GetString(gwcfg.ServiceMetadataUID); uid != "" {
-		rebind(data, "")
+		rebind(data, "", uid)
 	}
 	return
 }
