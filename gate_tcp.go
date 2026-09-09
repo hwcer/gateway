@@ -209,18 +209,18 @@ func (this *SocketRequest) verify() (*session.Data, error) {
 }
 
 // login 登录（gateway 内部）
+//
+// 顶号是 UID 级的,发生在选角回包落地时(见 players.rebind)——登录阶段不做任何
+// 占用判断,同账号多角色并行在线是合法状态,也就不存在"必须先协商再 Login"的时序约束。
 func (this *SocketRequest) login(guid string, value values.Values) (token string, err error) {
 	sock := this.Context.Socket
 	data := sock.Data()
 	if data != nil {
-		if data.UUID() != guid {
+		//同一条连接重复登录:只允许同一账号,拒绝换账号重登
+		if data.GetString(gwcfg.ServiceMetadataGUID) != guid {
 			return "", fmt.Errorf("please do not login again")
 		}
 	} else {
-		//顶号处置必须在 players.Connect(内含 Login)之前，理由见 negotiate
-		if err = negotiate(guid, sock.RemoteAddr().String(), sock); err != nil {
-			return
-		}
 		if data, err = players.Connect(sock, guid, value); err != nil {
 			return
 		}

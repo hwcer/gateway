@@ -6,6 +6,7 @@ import (
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
+	"github.com/hwcer/gateway/gwcfg"
 )
 
 const (
@@ -91,13 +92,12 @@ func Replace(p *session.Data, sock *cosnet.Socket) {
 	})
 }
 
-// Connect 长连接登录（token 路径）：建立/复用会话并绑定到这条连接。
+// Connect 长连接登录（token 路径）：新建认证会话并绑定到这条连接。
 //
-// ⚠️ **它自己不做顶号判断**。调用方必须先过网关层的 negotiate——那里才拿得到
-// Setting.ForceReplace，也才决定得了"老连接还活着时新端能不能进来"。
-// 直接调这个函数等于无条件强制顶号。
+// 登录阶段没有任何"占用"判断——同账号多角色并行是合法状态，
+// 角色级顶号在选角回包落地时发生（见 rebind）。
 func Connect(sock *cosnet.Socket, guid string, value values.Values) (data *session.Data, err error) {
-	if _, data, err = Login(guid, value); err == nil {
+	if _, data, err = Create(guid, value); err == nil {
 		Replace(data, sock)
 	}
 	return
@@ -120,6 +120,13 @@ func Reconnect(sock *cosnet.Socket, secret string) (data *session.Data, err erro
 	_, err = s.Refresh() //刷线TOKEN
 	data = s.Data
 	Replace(data, sock)
+	//会话已选角的要重新入表:存储还原的对象与表里的可能是两个实例(Redis 后端每次
+	//Verify 都新建对象),内存后端下则是同一实例、表项本就在——rebind 幂等。
+	//若断线期间角色已被接管,本会话的 uid 已被 supersede 清空,这里自然跳过:
+	//重连落地为未选角状态,夺回角色须走重新选角的占用判定,而非秘钥说了算。
+	if uid := data.GetString(gwcfg.ServiceMetadataUID); uid != "" {
+		rebind(data, "")
+	}
 	return
 }
 

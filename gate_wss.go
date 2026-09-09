@@ -48,24 +48,24 @@ func WSVerify(_ http.ResponseWriter, r *http.Request) (meta map[string]string, e
 	if err = ss.Verify(token); err != nil {
 		return nil, err
 	}
-	return map[string]string{gwcfg.ServiceMetadataGUID: ss.Data.UUID()}, nil
+	//会话 id 已不透明化,账号身份存 values(见 players.Create)
+	guid := ss.Data.GetString(gwcfg.ServiceMetadataGUID)
+	if guid == "" {
+		return nil, nil
+	}
+	return map[string]string{gwcfg.ServiceMetadataGUID: guid}, nil
 }
 func WSAccept(sock *cosnet.Socket, meta map[string]string) {
 	if len(meta) == 0 {
 		return
 	}
-	uuid, ok := meta[gwcfg.ServiceMetadataGUID]
+	guid, ok := meta[gwcfg.ServiceMetadataGUID]
 	if !ok {
 		return
 	}
 	value := gwcfg.Cookies.Filter(meta)
-	//顶号处置必须在 players.Connect(内含 Login)之前，理由见 negotiate
-	if err := negotiate(uuid, sock.RemoteAddr().String(), sock); err != nil {
-		logger.Alert("wss session replaced:%v", err)
-		sock.Close(0) //协商模式下新端不能上线，这条连接没有存在意义
-		return
-	}
-	if _, err := players.Connect(sock, uuid, value); err != nil {
+	//顶号是 UID 级的,发生在选角回包落地时(见 players.rebind)——登录不做占用判断
+	if _, err := players.Connect(sock, guid, value); err != nil {
 		logger.Alert("wss session create fail:%v", err)
 	}
 

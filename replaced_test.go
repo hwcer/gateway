@@ -2,13 +2,13 @@ package gateway
 
 import (
 	"net"
-	"strings"
 	"testing"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
 	"github.com/hwcer/cosnet/tcp"
+	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 )
@@ -40,17 +40,15 @@ func newReplacedTestSocket(t *testing.T, ss *cosnet.Sockets) (*cosnet.Socket, fu
 	}
 }
 
-// loginTestPlayer 建一个已登录、且绑定了长连接的玩家（走与 gate_tcp 相同的两步）。
-func loginTestPlayer(t *testing.T, ss *cosnet.Sockets, guid string) (*cosnet.Socket, func()) {
+// loginTestPlayer 建一个已登录、且绑定了长连接的玩家（走与 gate_tcp 相同的 Connect）。
+func loginTestPlayer(t *testing.T, ss *cosnet.Sockets, guid string) (*cosnet.Socket, *session.Data, func()) {
 	t.Helper()
 	sock, stop := newReplacedTestSocket(t, ss)
-	if err := negotiate(guid, sock.RemoteAddr().String(), sock); err != nil {
-		t.Fatalf("first login must not be rejected:%v", err)
-	}
 	if _, err := players.Connect(sock, guid, values.Values{}); err != nil {
-		t.Fatalf("first login must succeed:%v", err)
+		t.Fatalf("login must succeed:%v", err)
 	}
-	return sock, stop
+	p := sock.Data()
+	return sock, p, stop
 }
 
 func newTestSockets() *cosnet.Sockets {
@@ -62,115 +60,152 @@ func newTestSockets() *cosnet.Sockets {
 	return TCP.Sockets
 }
 
-// TestNegotiateForceReplace 强制顶号：新端立即上线，老连接照样收到通知并进入存活期。
+// TestSelectTakeover UID 级顶号：同角色第二条连接在**选角落地**时强制接管。
 //
-// 🔴 钉的是"两种策略下老连接的处置完全一样"——强制模式**不是**裸踢：
-// 老连接同样只收不发、同样有存活期，在途确认包才发得完；区别只在新端等不等它。
-func TestNegotiateForceReplace(t *testing.T) {
-	old := Setting.ForceReplace
-	defer func() { Setting.ForceReplace = old }()
-	Setting.ForceReplace = true
-
+// 🔴 钉的是新顶号语义的完整闭环：
+//   - 登录阶段不踢任何人（同账号多角色并行是合法状态），占用在选角回包落地时才处理
+//   - 老连接进入"只收不发"存活期：在途回包照常送达（仍可写），新请求被拒（不可读）
+//   - 老会话被 supersede：uid 清空、频道身份释放——随后的断开/清理不再以该角色行动
+//   - 隔离：老会话事后断开/清理，不得误删新会话的表项与频道成员
+func TestSelectTakeover(t *testing.T) {
 	ss := newTestSockets()
-	os, stop := loginTestPlayer(t, ss, "guid-force")
-	defer stop()
-
-	ns, stop2 := newReplacedTestSocket(t, ss)
-	defer stop2()
-	if err := negotiate("guid-force", ns.RemoteAddr().String(), ns); err != nil {
-		t.Fatalf("强制顶号下新端必须能直接上线,拿到:%v", err)
-	}
-	if _, err := players.Connect(ns, "guid-force", values.Values{}); err != nil {
-		t.Fatalf("connect error:%v", err)
+	sockA, pa, stopA := loginTestPlayer(t, ss, "guid-takeover")
+	defer stopA()
+	const uid = "8001"
+	players.Update(pa, values.Values{gwcfg.ServiceMetadataUID: uid})
+	if players.Get(uid) != pa {
+		t.Fatalf("选角后应入表")
 	}
 
-	if os.CanRead() {
+	name, value := "takeover", "room1"
+	channel.Join(pa, name, value)
+	defer channel.Delete(name, value)
+
+	//第二条连接:同账号同角色,选角落地 → 接管
+	sockB, pb, stopB := loginTestPlayer(t, ss, "guid-takeover")
+	defer stopB()
+	players.Update(pb, values.Values{gwcfg.ServiceMetadataUID: uid})
+
+	if players.Get(uid) != pb {
+		t.Fatal("接管后表项必须指向新会话")
+	}
+	if got := pa.GetString(gwcfg.ServiceMetadataUID); got != "" {
+		t.Fatalf("被接管的老会话 uid 必须清空,拿到 %q", got)
+	}
+	if _, ok := channel.NewSetter(pa).Get(name); ok {
+		t.Fatal("被接管的老会话频道身份未释放")
+	}
+	//老连接存活期:不能读(新请求被拒)、还能写(在途回包发完)
+	if sockA.CanRead() {
 		t.Fatal("老连接必须停止受理新请求")
 	}
-	if !os.CanWrite() {
+	if !sockA.CanWrite() {
 		t.Fatal("老连接必须仍然可写,否则在途回包全丢")
 	}
-	if os.Countdown() <= 0 {
-		t.Fatalf("老连接应处于存活期,Countdown=%d", os.Countdown())
+	if sockA.Countdown() <= 0 {
+		t.Fatalf("老连接应处于存活期,Countdown=%d", sockA.Countdown())
 	}
-	//会话必须已经指向新连接,否则推送还会投给正在退场的老连接
-	if p := players.Get("guid-force"); p == nil || !players.Socket(p).Is(ns) {
-		t.Fatal("强制顶号后会话必须指向新连接")
+	//新连接正常工作
+	if !sockB.CanRead() || !sockB.CanWrite() {
+		t.Fatal("新连接不应受限")
+	}
+
+	//隔离:新会话入频道;老会话随后走完整下线流程,不得波及
+	channel.Join(pb, name, value)
+	if n := channelMemberCount(name, value); n != 1 {
+		t.Fatalf("新会话入房后成员数=%d, want 1", n)
+	}
+	if err := players.Disconnect(sockA); err != nil { //老连接断开事件
+		t.Fatalf("disconnect error:%v", err)
+	}
+	channel.Release(pa) //会话清理(setting.release 同款两连)
+	players.Delete(pa)
+
+	if players.Get(uid) != pb {
+		t.Fatal("老会话清理误摘了新会话的表项")
+	}
+	if n := channelMemberCount(name, value); n != 1 {
+		t.Fatalf("老会话清理波及了新会话的频道成员,成员数=%d, want 1", n)
 	}
 }
 
-// TestNegotiateWaitReplace 协商顶号：新端被拒并拿到剩余秒数，会话仍指向老连接。
-func TestNegotiateWaitReplace(t *testing.T) {
-	old := Setting.ForceReplace
-	defer func() { Setting.ForceReplace = old }()
-	Setting.ForceReplace = false
-
+// TestReconnectKeepsRole 闪断重连（secret 路径）：角色未被顶，重连即恢复原状。
+// 存储还原的会话对象在 Redis 后端下与表里的是两个实例——rebind 幂等入表兜住这一点。
+func TestReconnectKeepsRole(t *testing.T) {
 	ss := newTestSockets()
-	os, stop := loginTestPlayer(t, ss, "guid-wait")
-	defer stop()
+	_, pa, stopA := loginTestPlayer(t, ss, "guid-reconnect")
+	defer stopA()
+	const uid = "8002"
+	players.Update(pa, values.Values{gwcfg.ServiceMetadataUID: uid})
 
-	ns, stop2 := newReplacedTestSocket(t, ss)
-	defer stop2()
-	err := negotiate("guid-wait", ns.RemoteAddr().String(), ns)
-	if err == nil {
-		t.Fatal("协商模式下新端本次登录必须被拒")
-	}
-	msg, ok := err.(*values.Message)
-	if !ok {
-		t.Fatalf("错误类型必须是 *values.Message,拿到 %T", err)
-	}
-	if msg.Code != session.ErrorSessionReplaced.Code {
-		t.Fatalf("错误码 = %d, want %d", msg.Code, session.ErrorSessionReplaced.Code)
-	}
-	//🔴 参数走 Args,顺序 [剩余秒数, 在线端IP]。判据落在**值**上：
-	//只断言 len(Args)==2 抓不到"两个 IP 搞反了"这一类退化 —— 发给新端的必须是
-	//老连接的地址,不是新端自己的。
-	if len(msg.Args) != 2 {
-		t.Fatalf("Args = %v, want [剩余秒数, 在线端IP]", msg.Args)
-	}
-	if sec := values.ParseInt32(msg.Args[0]); sec <= 0 {
-		t.Fatalf("必须带上剩余秒数供新端定时重试,拿到 %v", msg.Args[0])
-	}
-	wantIP := os.RemoteAddr().String()
-	if i := strings.Index(wantIP, ":"); i > 0 {
-		wantIP = wantIP[:i]
-	}
-	if got, _ := msg.Args[1].(string); got != wantIP {
-		t.Fatalf("在线端IP = %q, want %q(老连接的地址,不是新端自己的)", got, wantIP)
-	}
-	//🔴 关键:会话不能被换走。换走了就会出现"推送投给新连接、确认包丢在老连接"的割裂
-	if p := players.Get("guid-wait"); p == nil || !players.Socket(p).Is(os) {
-		t.Fatal("协商模式下会话必须仍然指向老连接")
+	secret, err := session.New(pa).Refresh()
+	if err != nil {
+		t.Fatalf("refresh error:%v", err)
 	}
 
-	//新端反复重试不得刷新倒计时,否则老连接被无限续命、新端永远上不来
-	before := os.Countdown()
-	if err = negotiate("guid-wait", ns.RemoteAddr().String(), ns); err == nil {
-		t.Fatal("重试仍应被拒")
+	sockC, stopC := newReplacedTestSocket(t, ss)
+	defer stopC()
+	if _, err := players.Reconnect(sockC, secret); err != nil {
+		t.Fatalf("reconnect error:%v", err)
 	}
-	if after := os.Countdown(); after != before {
-		t.Fatalf("重试刷新了倒计时:%d -> %d", before, after)
+	pc := sockC.Data()
+	if pc == nil {
+		t.Fatal("重连后必须绑定会话")
+	}
+	if players.Get(uid) != pc {
+		t.Fatal("重连后表项必须指向重连会话")
 	}
 }
 
-// TestNegotiateNoIncumbent 无人占用时两种策略都必须放行。
-func TestNegotiateNoIncumbent(t *testing.T) {
-	old := Setting.ForceReplace
-	defer func() { Setting.ForceReplace = old }()
+// TestReconnectAfterTakeover 断线期间角色被别的会话接管 → 持 secret 重连
+// **不得悄悄夺回角色**：supersede 已清掉本会话的 uid，重连落地为未选角状态，
+// 要不要回到该角色由玩家重新选角、经业务侧占用判定决定（同账号两台设备
+// 争同一角色的拉锯不该由一条重连秘钥决定）。
+func TestReconnectAfterTakeover(t *testing.T) {
+	ss := newTestSockets()
+	_, pa, stopA := loginTestPlayer(t, ss, "guid-reconnect2")
+	defer stopA()
+	const uid = "8004"
+	players.Update(pa, values.Values{gwcfg.ServiceMetadataUID: uid})
 
-	newTestSockets()
-	for _, force := range []bool{true, false} {
-		Setting.ForceReplace = force
-		if err := negotiate("guid-absent", "127.0.0.1:1", nil); err != nil {
-			t.Fatalf("ForceReplace=%v 时无人占用仍被拒:%v", force, err)
-		}
+	secret, err := session.New(pa).Refresh()
+	if err != nil {
+		t.Fatalf("refresh error:%v", err)
+	}
+
+	_, pb, stopB := loginTestPlayer(t, ss, "guid-reconnect2")
+	defer stopB()
+	players.Update(pb, values.Values{gwcfg.ServiceMetadataUID: uid}) //B接管
+	if players.Get(uid) != pb {
+		t.Fatal("前提:B应已接管")
+	}
+
+	//A 持 secret 重连:会话还原,但角色已被接管——不得 displacing B
+	sockC, stopC := newReplacedTestSocket(t, ss)
+	defer stopC()
+	if _, err := players.Reconnect(sockC, secret); err != nil {
+		t.Fatalf("reconnect error:%v", err)
+	}
+	pc := sockC.Data()
+	if pc == nil {
+		t.Fatal("重连后必须绑定会话")
+	}
+	if players.Get(uid) != pb {
+		t.Fatal("重连不得夺回已被接管的角色")
+	}
+	if got := pc.GetString(gwcfg.ServiceMetadataUID); got != "" {
+		t.Fatalf("被接管过的会话重连后应为未选角状态,拿到 %q", got)
+	}
+	//老会话(pa)的 uid 必须仍为空——内存后端下重连还原的就是它
+	if pa.GetString(gwcfg.ServiceMetadataUID) != "" {
+		t.Fatal("被接管的会话 uid 不应复活")
 	}
 }
 
 // TestResolveTargetKeepsResponseWhole 请求驱动的推送必须回到发起它的那条连接。
 //
 // 🔴 钉的是顶号时"取 ROLE 信息只收到一半"的根因：业务服先推数据、再回确认包，
-// 推送走 GUID（顶号后已指向新端）、确认包走请求自己的 socket（老端），
+// 推送走会话（顶号后已指向新端）、确认包走请求自己的 socket（老端），
 // 一次响应被劈成两半，两头都拿不全。认 socketId 之后两者一起回到老连接。
 func TestResolveTargetKeepsResponseWhole(t *testing.T) {
 	ss := newTestSockets()
@@ -188,65 +223,44 @@ func TestResolveTargetKeepsResponseWhole(t *testing.T) {
 	}
 }
 
-// TestResolveTargetNeverRedirects 原连接已销毁时必须丢弃，**绝不回落 GUID 改投新连接**。
+// TestResolveTargetNeverRedirects 原连接已销毁时必须丢弃，**绝不回落会话改投新连接**。
 func TestResolveTargetNeverRedirects(t *testing.T) {
 	ss := newTestSockets()
 	ns, stop := newReplacedTestSocket(t, ss)
 	defer stop()
 
 	//一个从不存在的 socket id：等价于原连接已经销毁。
-	//即便按 GUID 能找到 ns，也不许改投给它。
+	//即便按会话能找到 ns，也不许改投给它。
 	if got := resolveTarget(nil, ns.Id()+9999); got != nil {
 		t.Fatalf("原连接已失效时必须丢弃,却投给了 socket %d", got.Id())
 	}
 }
 
-// TestResolveTargetByGuid 主动推送（定时器/AOI/跨玩家）没有 socketId，按会话投递。
-func TestResolveTargetByGuid(t *testing.T) {
+// TestResolveTargetBySession 主动推送（定时器/AOI/跨玩家）没有 socketId，按会话投递。
+func TestResolveTargetBySession(t *testing.T) {
 	ss := newTestSockets()
-	sock, stop := loginTestPlayer(t, ss, "guid-resolve")
+	sock, p, stop := loginTestPlayer(t, ss, "guid-resolve")
 	defer stop()
+	players.Update(p, values.Values{gwcfg.ServiceMetadataUID: "8003"})
 
-	p := players.Get("guid-resolve")
+	if got := players.Get("8003"); got != p {
+		t.Fatal("选角后应能按 uid 取回会话")
+	}
 	if got := resolveTarget(p, 0); got == nil || !got.Is(sock) {
 		t.Fatal("无 socketId 时应投给会话当前的连接")
 	}
 	if resolveTarget(nil, 0) != nil {
 		t.Fatal("两者都没有时应丢弃")
 	}
-}
-
-// TestResolveTargetByUID 只有UID时经 UID->GUID 全局映射反查定位会话
-// （定位优先级 socketId > GUID > UID，见 send）。
-func TestResolveTargetByUID(t *testing.T) {
-	ss := newTestSockets()
-	sock, stop := newReplacedTestSocket(t, ss)
-	defer stop()
-
-	guid := "guid-by-uid"
-	//登录值带uid:Login 会顺带建立 UID->GUID 映射
-	if _, err := players.Connect(sock, guid, values.Values{gwcfg.ServiceMetadataUID: "3001"}); err != nil {
-		t.Fatalf("login error:%v", err)
-	}
-	defer players.Delete(players.Get(guid))
-
-	//UID 反查链路:UID -> GUID -> 会话 -> 连接(send 走的就是 GetWithUid)
-	p := players.GetWithUid("3001")
-	if p == nil {
-		t.Fatal("UID 反查映射未建立")
-	}
-	if got := resolveTarget(p, 0); got == nil || !got.Is(sock) {
-		t.Fatal("按 UID 定位会话后应投给其当前连接")
-	}
-	if players.GUID("9999") != "" {
-		t.Fatal("不在线的UID不应有映射")
+	if players.Get("9999") != nil {
+		t.Fatal("不在线的角色不应有表项")
 	}
 }
 
-// TestSendPrefersSocketOverSession GUID 取不到会话时，只要 socketId 指的连接还在就该照投。
+// TestSendPrefersSocketOverSession 会话取不到时，只要 socketId 指的连接还在就该照投。
 //
-// 🔴 钉的是分工：**socketId 定位连接，GUID 只用来更新用户信息**。
-// 早先 players.Get 取不到就直接丢弃，等于让"socketId 优先"这条规则在登录途中失效。
+// 🔴 钉的是分工：**socketId 定位连接，uid 只用来查会话**。
+// 早先 p 取不到就直接丢弃，等于让"socketId 优先"这条规则在登录途中失效。
 func TestSendPrefersSocketOverSession(t *testing.T) {
 	ss := newTestSockets()
 	sock, stop := newReplacedTestSocket(t, ss)

@@ -201,18 +201,16 @@ type HttpRequest struct {
 }
 
 // login 登录（gateway 内部）
+//
+// 顶号是 UID 级的（见 players.rebind），登录阶段不做占用判断。
+// ⚠️ 也不再收掉会话上的老长连接——多角色并行下那可能是**同一账号另一个角色**
+// 正在游戏的活连接，旧账号级顶号语义里"短连接登录踢掉长连接"的行为一并作废。
 func (this *HttpRequest) login(guid string, value values.Values) (token string, err error) {
-	// 顶号处置：三条登录路径 TCP/WSS/HTTP 行为一致，且必须在 Login 之前，理由见 negotiate
-	if err = negotiate(guid, this.Context.RemoteAddr(), nil); err != nil {
-		return
-	}
 	var data *session.Data
-	token, data, err = players.Login(guid, value)
+	token, data, err = players.Create(guid, value)
 	if err != nil {
 		return
 	}
-	// 短连接自己不持有 socket，这里只是把会话上的老长连接（若还在）收掉
-	players.Replace(data, nil)
 
 	// 设置cookie
 	cookie := &http.Cookie{Name: session.Options.Name, Path: "/", Value: token}

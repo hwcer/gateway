@@ -69,7 +69,8 @@ func (this *access) OAuth(r inbound, req values.Metadata, needMaster bool) (p *s
 	if p, err = this.oauth(r, req); err != nil {
 		return nil, err
 	}
-	req[gwcfg.ServiceMetadataGUID] = p.UUID()
+	//会话 id 已不透明化,账号身份存 values(见 players.Create)
+	req[gwcfg.ServiceMetadataGUID] = p.GetString(gwcfg.ServiceMetadataGUID)
 	req[gwcfg.ServiceMetadataAddress] = r.RemoteAddr()
 	if needMaster && !this.IsDeveloper(p) {
 		err = errors.ErrNeedGameDeveloper
@@ -83,13 +84,13 @@ func (this *access) OAuth(r inbound, req values.Metadata, needMaster bool) (p *s
 
 // Player 必须选择角色（OAuthTypeSelect 与 OAuthTypePlayer 共用）
 //
-// 🔴 GUID 与 SocketId 与 UID 一并下发,缺一不可 —— 业务服要往回推消息时,
-// 网关的 send() 按 **GUID** 定位会话(players.Get(guid)),write() 按 SocketId
-// 定位连接;UID 只是发出去之前的一道防串号校验。
+// 🔴 SocketId 与 UID 一并下发,缺一不可 —— 业务服要往回推消息时,
+// 网关的 send() 按 **UID** 直查会话表(表键=uid),socketId 定位请求来源那条连接。
+// GUID 只是随行的业务身份信息(会话 values 里的普通字段),不参与定位。
 //
 // 游戏服看不出这个缺失:它的 handler 里 c.Player 非空,推送走 player.Send,
-// 自带 GUID。但**没有玩家容器的服务**(社交服等)只能走 Context.Send 的另一条分支,
-// 那条分支拿不到 GUID/SocketId 就直接丢弃并打 Alert —— 表现是"接口调通了、
+// 自带 uid。但**没有玩家容器的服务**(社交服等)只能走 Context.Send 的另一条分支,
+// 那条分支拿不到 SocketId/UID 就直接丢弃并打 Alert —— 表现是"接口调通了、
 // 客户端什么也没收到",而且只有翻日志才看得见。
 func (this *access) Player(r inbound, req values.Metadata, needDeveloper bool) (p *session.Data, err error) {
 	if p, err = this.oauth(r, req); err != nil {
@@ -102,7 +103,7 @@ func (this *access) Player(r inbound, req values.Metadata, needDeveloper bool) (
 	if sock := r.Socket(); sock != nil {
 		req[gwcfg.ServiceMetadataSocketId] = fmt.Sprintf("%d", sock.Id())
 	}
-	req[gwcfg.ServiceMetadataGUID] = p.UUID()
+	req[gwcfg.ServiceMetadataGUID] = p.GetString(gwcfg.ServiceMetadataGUID)
 	req[gwcfg.ServiceMetadataUID] = uid
 	if needDeveloper && !this.IsDeveloper(p) {
 		err = errors.ErrNeedGameDeveloper
