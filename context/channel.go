@@ -50,6 +50,13 @@ func (this *Channel) Leave(name, value string) {
 	this.SetMetadata(s, value)
 }
 
+// Kick 将指定玩家踢出频道,uid 为被踢玩家的角色ID
+// 与 Join/Leave 一样挂在请求者响应 metadata 上,由网关在回包时执行
+func (this *Channel) Kick(name, value string, uid string) {
+	s := strings.Join([]string{gwcfg.ServicePlayerChannelKick, name}, "")
+	this.SetMetadata(s, ChannelNameEncode(value, uid))
+}
+
 // Broadcast  频道广播
 func (this *Channel) Broadcast(path string, args any, name, value string, req values.Metadata) {
 	if req == nil {

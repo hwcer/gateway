@@ -22,6 +22,7 @@ const (
 
 	ServicePlayerChannelJoin  = "player.join."     //已经加入的房间
 	ServicePlayerChannelLeave = "player.leave."    //离开房间
+	ServicePlayerChannelKick  = "player.kick."     //把指定玩家踢出房间,值为[频道值,被踢玩家UID]
 	ServicePlayerSelector     = "player.selector." //服务器重定向
 
 	ServiceResponseFlag = "_res_flag" //message flag

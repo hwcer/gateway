@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/hwcer/cosgo/session"
+	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/logger"
 )
 
@@ -72,6 +73,40 @@ func leave(p *session.Data, name, value string) {
 	if room := Get(name, value); room != nil {
 		room.Leave(p)
 	}
+}
+
+// Kick 将指定UID的玩家踢出频道
+// 参数:
+//
+//	uid - 被踢玩家的角色ID
+//	name - 频道名称
+//	value - 频道参数
+//
+// 只在频道成员中查找目标,不在频道内或频道不存在均视为成功(幂等)
+func Kick(uid, name, value string) {
+	if uid == "" {
+		logger.Debug("channel Kick uid is empty name:%s value:%s", name, value)
+		return
+	}
+	room := Get(name, value)
+	if room == nil {
+		logger.Debug("channel Kick room not found name:%s value:%s", name, value)
+		return
+	}
+	var target *session.Data
+	room.Range(func(p *session.Data) bool {
+		if p.GetString(gwcfg.ServiceMetadataUID) == uid {
+			target = p
+			return false
+		}
+		return true
+	})
+	if target == nil {
+		logger.Debug("channel Kick player not in channel uid:%s name:%s value:%s", uid, name, value)
+		return
+	}
+	logger.Debug("channel Kick uid:%s name:%s value:%s", uid, name, value)
+	Leave(target, name, value)
 }
 func Range(name, value string, f func(*session.Data) bool) {
 	room := Get(name, value)
