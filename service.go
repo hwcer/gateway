@@ -65,7 +65,7 @@ func send(c *cosrpc.Context) any {
 	}
 	if p == nil && uid != "" {
 		//UID 反查:优先级排在 GUID 之后,定位不到会话再经全局映射换算
-		p = players.Get(players.GUID(uid))
+		p = players.GetWithUid(uid)
 	}
 	if p != nil {
 		//顶号/换角色后同一 GUID 上挂的可能已经是另一个 uid,不校验就是发错人

@@ -38,8 +38,7 @@ func loadOrCreate(name, value string, fixed bool) (r *Channel) {
 // 注意: 同一名称的频道，一个角色只能加入一个；频道一律按UID绑定,无UID的会话拒绝入房
 func Join(p *session.Data, name string, value string) {
 	logger.Debug("channel Join name:%s value:%s", name, value)
-	uid := uidOf(p)
-	if uid == "" {
+	if uidOf(p) == "" {
 		logger.Error("channel Join uid empty name:%s value:%s", name, value)
 		return
 	}
@@ -52,7 +51,7 @@ func Join(p *session.Data, name string, value string) {
 	// 清掉该实例后重试,避免"加入"与"空房销毁"并发时玩家被静默丢弃
 	for i := 0; i < 8; i++ {
 		room := loadOrCreate(name, value, false)
-		if room.Join(uid, p) {
+		if room.Join(p) {
 			return
 		}
 		manage.CompareAndDelete(rk, room)

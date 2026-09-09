@@ -35,8 +35,14 @@ func (this *Channel) Id() string {
 	return this.id
 }
 
-// Join 会话入房,uid 为成员键(由 manage.Join 保证非空)
-func (this *Channel) Join(uid string, d *session.Data) bool {
+// Join 会话入房,以会话当前UID为成员键(UID由manage.Join提前拦截保证非空)
+func (this *Channel) Join(d *session.Data) bool {
+	uid := uidOf(d)
+	if uid == "" {
+		//防御路径,正常到不了:返回true避免被上层误判为"空房销毁重试"
+		logger.Error("channel Join uid empty, room:%s", this.id)
+		return true
+	}
 	// 快速路径检查：使用读锁检查玩家是否已经在频道中
 	this.locker.RLock()
 	exists := this.ps[uid] != nil
@@ -64,6 +70,7 @@ func (this *Channel) Join(uid string, d *session.Data) bool {
 }
 
 // Member 按UID取频道内的成员会话,不在频道内返回nil
+// 显式收UID而非从会话推导:踢人按目标UID按键查找
 func (this *Channel) Member(uid string) *session.Data {
 	this.locker.RLock()
 	defer this.locker.RUnlock()
@@ -71,6 +78,7 @@ func (this *Channel) Member(uid string) *session.Data {
 }
 
 // Leave 按UID移除成员
+// 显式收UID而非从会话推导:换角清理(SwitchUID)删的是旧UID键,而会话当前UID已是新值
 func (this *Channel) Leave(uid string) bool {
 	this.locker.Lock()
 	defer this.locker.Unlock()
