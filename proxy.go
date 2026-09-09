@@ -122,15 +122,7 @@ func forward(proxy inbound, path string) (reply []byte, err error) {
 		return nil, err
 	}
 
-	// 处理登录和退出登录 —— 需要 inbound
-	if guid, ok := res[gwcfg.ServicePlayerLogin]; ok {
-		//秘钥不回写 res:长连接由 S2CSecret 事件下发,短连接由 login 写进 cookie,都不走回包。
-		//业务层要用这次新建的会话,在 Response 钩子里 c.Session() 取即可——它排在这之后。
-		if _, err = proxy.login(guid, gwcfg.Cookies.Filter(res)); err != nil {
-			return nil, err
-		}
-		p = proxy.Session()
-	}
+	// 处理登出 —— 需要 inbound
 	if _, ok := res[gwcfg.ServicePlayerLogout]; ok {
 		if err = proxy.logout(); err != nil {
 			return nil, err
@@ -199,7 +191,7 @@ func proxyRequest(c context.Context, servicePath, serviceMethod string, meta val
 	// 请求自己的 socket。一次响应被劈成两半，客户端两头都拿不全。
 	//
 	// ⚠️ 曾经只有 None/OAuth 两档塞它，Player/Select 档不塞。业务服感觉不到，
-	// 因为 c.Send 会从玩家对象上现取 GUID 兜住；坏就坏在兜住之后没人发现路由变了。
+	// 因为 c.Send 会从玩家对象上现取 uid 兜住；坏就坏在兜住之后没人发现路由变了。
 	if sock := c.Socket(); sock != nil {
 		req.Set(gwcfg.ServiceMetadataSocketId, strconv.FormatUint(sock.Id(), 10))
 	}

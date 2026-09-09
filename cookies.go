@@ -44,6 +44,6 @@ func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32) {
 		}
 	}
 	if len(vs) > 0 {
-		players.Update(p, vs) //uid 变更时同步维护 UID->GUID 映射
+		players.Update(p, vs) //uid 变更(首次选角/换角)时同步维护会话表
 	}
 }

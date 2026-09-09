@@ -151,7 +151,7 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	Setting.Handler.S2CSecret(sock, ts)
 }
 
-// S2CReplaced 有人请求顶号时下发协商提示（转交 Setting.Handler，默认 Default 以 JSON 下发）
+// S2CReplaced 连接被接管（UID 级顶号）时通知老端（转交 Setting.Handler，默认 Default 以 JSON 下发）
 func (this *TcpServer) S2CReplaced(sock *cosnet.Socket, i any) {
 	if sock == nil {
 		return

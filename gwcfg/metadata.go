@@ -16,7 +16,6 @@ const (
 	ServiceMessageIgnore  = "_msg_ignore"
 	ServiceMessageChannel = "_msg_channel"
 
-	ServicePlayerLogin  = "_player_login"
 	ServicePlayerLogout = "_player_logout"
 	ServicePlayerCookie = "_player_cookie"
 

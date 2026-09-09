@@ -31,7 +31,7 @@ func Register(i any, prefix ...string) {
 	}
 }
 
-// Deprecated: 用 send。定位规则已经统一——socketId 与 GUID 二选一，socketId 优先，
+// Deprecated: 用 send。定位规则已经统一——socketId 与会话二选一，socketId 优先，
 // write 只是"只有 socketId"的那个特例，没有必要单独存在。保留只为兼容既有调用方。
 func write(c *cosrpc.Context) any {
 	return send(c)
@@ -85,9 +85,9 @@ func send(c *cosrpc.Context) any {
 // 规则背后是一条不变量：**请求驱动的推送必须回到发起它的那条连接**。
 //
 // Forward 每次转发都带上 socketId，业务服推消息时原样带回。认 socketId 而不是回落到
-// GUID，代次隔离就是白送的：顶号或重连之后那条连接要么还在（顶号存活期内它 Closing
+// 会话，代次隔离就是白送的：顶号或重连之后那条连接要么还在（存活期内它 Closing
 // 但仍可写，推送与确认包一起回到老连接）、要么已经销毁（投不出去，丢弃）——
-// **绝不会改投到新端**。按 GUID 投才会：上一代连接的数据推给刚上来的另一个人，
+// **绝不会改投到新端**。按会话投才会：上一代连接的数据推给刚上来的另一个人，
 // 而那次请求的确认包走的是请求自己的 socket，一次响应被劈成两半，两头都拿不全。
 // 这正是顶号时"取 ROLE 信息只收到一半"的根因。
 //
@@ -108,7 +108,7 @@ func resolveTarget(p *session.Data, socketId uint64) *cosnet.Socket {
 }
 
 // deliver 把消息投递到**指定连接**：过一遍业务 Response 钩子(加密/改包/改 flag),再带上请求号发出。
-// 只管发,不管"这条连接怎么找到的"——定位逻辑在 write(按 socket id)/send(按 GUID)里。
+// 只管发,不管"这条连接怎么找到的"——定位逻辑在 send(按 socketId/uid)里。
 func deliver(c *cosrpc.Context, sock *cosnet.Socket) any {
 	path := c.GetMetadata(gwcfg.ServiceMessagePath)
 	if path == "" {
