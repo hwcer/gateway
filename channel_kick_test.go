@@ -121,6 +121,34 @@ func TestPlayersUIDMapping(t *testing.T) {
 	}
 }
 
+// 换角解绑旧UID必须带归属校验:同一UID已被别的会话抢占时,换角不得误删别人的映射
+// (与 players.Delete 的防护同一条规则,那条守的是下线,这条守的是换角)
+func TestPlayersUIDSwitchGuard(t *testing.T) {
+	pa := newKickTestPlayer(t, "guard-a", "2101")
+	pb := newKickTestPlayer(t, "guard-b", "2101") //B抢占2101
+
+	if g := players.GUID("2101"); g != "guard-b" {
+		t.Fatalf("B抢占后 GUID(2101)=%s, want guard-b", g)
+	}
+	//A换角到2102:不得把已归属B的2101映射删掉
+	if _, p2, err := players.Login("guard-a", values.Values{gwcfg.ServiceMetadataUID: "2102"}); err != nil {
+		t.Fatalf("relogin error:%v", err)
+	} else if p2 != pa {
+		t.Fatalf("同GUID重登应复用会话")
+	}
+	if g := players.GUID("2101"); g != "guard-b" {
+		t.Fatalf("A换角误删了B的映射, GUID(2101)=%s", g)
+	}
+	if g := players.GUID("2102"); g != "guard-a" {
+		t.Fatalf("A新UID未绑定, GUID(2102)=%s", g)
+	}
+
+	defer func() {
+		players.Delete(pa)
+		players.Delete(pb)
+	}()
+}
+
 // 频道命令统一编码:key = 前缀 + ["name","value"],value 仅 Kick 携带被踢UID。
 // 覆盖 CookiesUpdate 对三种命令的解析与执行
 func TestCookiesUpdateChannelCommands(t *testing.T) {

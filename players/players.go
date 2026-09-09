@@ -49,9 +49,15 @@ func syncUID(p *session.Data, oldUID string) {
 		return
 	}
 	// 换角:旧UID解绑。频道成员一律按UID绑定,旧角色的频道身份也要一并清理,
-	// 否则换角后旧公会的广播还会推给新角色
+	// 否则换角后旧公会的广播还会推给新角色。
+	// 与 Delete 同一条防护:映射仍指向本会话才删——转服/异常双登后同一UID可能已归属
+	// 别的会话,误删别人的映射会让按UID推送(GetWithUid)静默断链
 	if oldUID != "" {
-		uids.Delete(oldUID)
+		if v, ok := uids.Load(oldUID); ok {
+			if g, _ := v.(string); g == p.UUID() {
+				uids.Delete(oldUID)
+			}
+		}
 		channel.SwitchUID(p, oldUID)
 	}
 	if uid != "" {
