@@ -134,6 +134,17 @@ func forward(proxy inbound, path string) (reply []byte, err error) {
 
 	// 更新用户会话的 cookies 信息
 	if p != nil {
+		//认证态(未落库)会话 + 选角回包(uid cookie) = 正式 LOGIN:升级为正式会话
+		//(落存储/换不透明id/下发重连秘钥)。必须先于 CookiesUpdate——uid 要落到
+		//正式会话上入表(rebind)才算数;也必须先于 Response——钩子里 c.Session()
+		//要读到升级后的会话。短连接没有 socket,不在这条路上(HTTP 的会话本就是正式的)
+		if sock := proxy.Socket(); sock != nil && !players.Logged(p) && res.GetString(gwcfg.ServiceMetadataUID) != "" {
+			real, err := players.Login(sock, p)
+			if err != nil {
+				return nil, err
+			}
+			p = real
+		}
 		CookiesUpdate(res, p, proxy.Index())
 	}
 	//Response 排在登录/登出之后:钩子里 c.Session() 要读到这次新建的会话

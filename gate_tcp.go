@@ -122,10 +122,13 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 		return err
 	}
 	if Setting.G2SOAuth == "" {
-		return nil //不需要业务服确认,登录到此为止
+		return nil //不需要业务服确认,认证到此为止
 	}
-	//秘钥交给业务服,由它决定要不要在确认包里回给客户端
-	ctx.SetMetadata(gwcfg.ServicePlayerCookie, secret)
+	//秘钥交给业务服,由它决定要不要在确认包里回给客户端。
+	//两段式登录下认证阶段恒为空——重连秘钥由 S2CSecret 在选角落地(LOGIN)时下发
+	if secret != "" {
+		ctx.SetMetadata(gwcfg.ServicePlayerCookie, secret)
+	}
 	ctx.body = []byte{} //oauth 路径显式置空，业务层未设置时也不回退到客户端凭据报文
 	if err = args.GetValues(data, &ctx); err != nil {
 		return err
@@ -141,6 +144,11 @@ func (this *TcpServer) C2SOAuth(c *cosnet.Context) any {
 func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	data := sock.Data()
 	if data == nil {
+		return
+	}
+	//认证态会话(未落库)没有秘钥:选角落地(LOGIN)时 Replace 会再次触发本事件,
+	//这里跳过——否则 Token() 会在伪会话上现生成一个不落存储的废秘钥发给客户端
+	if !players.Logged(data) {
 		return
 	}
 	ss := session.New(data)
@@ -209,25 +217,15 @@ func (this *SocketRequest) verify() (*session.Data, error) {
 	return data, nil
 }
 
-// login 登录（gateway 内部）
+// login 认证（gateway 内部）:只把 GUID 绑到 socket.Data,**不执行 LOGIN**——
+// 正式会话(落存储/不透明id/重连秘钥)在选角回包落地时建立(players.Login)。
+// 返回的 token 恒为空:秘钥改由 S2CSecret 事件在 LOGIN 时下发。
 //
-// 顶号是 UID 级的,发生在选角回包落地时(见 players.rebind)——登录阶段不做任何
-// 占用判断,同账号多角色并行在线是合法状态,也就不存在"必须先协商再 Login"的时序约束。
+// 顶号是 UID 级的,发生在选角回包落地时(见 players.rebind)——认证阶段不做任何
+// 占用判断,同账号多角色并行在线是合法状态,也就不存在"必须先协商"的时序约束。
 func (this *SocketRequest) login(guid string, value values.Values) (token string, err error) {
-	sock := this.Context.Socket
-	data := sock.Data()
-	if data != nil {
-		//同一条连接重复登录:只允许同一账号,拒绝换账号重登
-		if data.GetString(gwcfg.ServiceMetadataGUID) != guid {
-			return "", fmt.Errorf("please do not login again")
-		}
-	} else {
-		if data, err = players.Connect(sock, guid, value); err != nil {
-			return
-		}
-	}
-	ss := session.New(data)
-	return ss.Token()
+	_, err = players.Auth(this.Context.Socket, guid, value)
+	return "", err
 }
 
 // logout 登出（gateway 内部）

@@ -9,6 +9,7 @@ import (
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
+	"github.com/hwcer/cosnet"
 	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/gwcfg"
 )
@@ -18,7 +19,21 @@ import (
 // 认证(登录)阶段的会话不进表——它们住在 socket.data(TCP/WSS)或 cookie/存储(HTTP),
 // 没有任何"按账号查会话"的需求:**同账号多角色并行在线是合法状态**。
 // 顶号因此是 UID 级而不是账号级:登录不踢任何人,角色占用在选角回包落地时处理(见 rebind)。
+//
+// 长连接上的登录是**两段式**:
+//
+//	认证成功   → Auth:仅把 GUID 绑到 socket.Data(内存态,不落存储、不发秘钥)——
+//	             这不是 LOGIN,请求鉴权照常走 OAuth 档,角色级接口被 ErrNotSelectRole 挡住
+//	选角回包落地 → Login:升级为正式会话(落存储+换不透明id+绑定连接,此刻才下发
+//	             重连秘钥);uid cookie 随之经 Update→rebind 入表
 var players = sync.Map{}
+
+// Logged 会话是否已完成正式登录(LOGIN)。
+// 判据是会话持有秘钥:正式会话必经 Create→Refresh,秘钥一定存在;认证态伪会话
+// 不落存储、永不 Refresh——这个判据同时把 Redis 还原副本也判为已登录(存储里有秘钥)。
+func Logged(p *session.Data) bool {
+	return p != nil && p.GetString(session.TokenSecretName) != ""
+}
 
 // newID 会话身份:id 用"guid/随机段"的不透明值,与账号解耦。
 // guid 前缀仅为日志可读,唯一性由随机段保证——同账号多角色并行时各会话的
@@ -42,8 +57,47 @@ func Create(guid string, value values.Values) (token string, data *session.Data,
 	data = session.NewData(newID(guid), value)
 	data.Set(gwcfg.ServiceMetadataGUID, guid)
 	ss := session.New(data)
-	token, err = ss.New(data)
+	if token, err = ss.New(data); err != nil {
+		return
+	}
+	//秘钥写穿存储:Refresh 只改内存副本+标脏,不 Release 的话 Redis 后端里它
+	//永远不落盘——重连 Verify 还原出的副本没有秘钥,直接 ErrorSessionIllegal。
+	//内存后端的 Storage.Update 是 no-op,行为不变
+	ss.Release()
 	return
+}
+
+// Auth 认证成功:仅把 GUID 绑到 socket.Data,**这不是 LOGIN**——
+// 不建会话、不落存储、不下发秘钥。正式会话要等选角回包落地(见 Login),
+// 这一段里连接上只有账号身份:请求鉴权照常(OAuth 档),角色级接口被
+// ErrNotSelectRole 挡住,心跳由网关自己应答。
+// 同一连接重复认证同一账号幂等(沿用现有伪会话),换账号重登报错。
+func Auth(sock *cosnet.Socket, guid string, value values.Values) (*session.Data, error) {
+	if p := sock.Data(); p != nil {
+		if p.GetString(gwcfg.ServiceMetadataGUID) != guid {
+			return nil, fmt.Errorf("please do not login again")
+		}
+		return p, nil
+	}
+	p := session.NewData(guid, value) //id=guid 仅日志可读,不落存储
+	p.Set(gwcfg.ServiceMetadataGUID, guid)
+	//Authentication 事件照发(S2CSecret 对未落库会话自然跳过),连接从此带上身份
+	sock.Authentication(p)
+	return p, nil
+}
+
+// Login 选角回包落地 = 正式 LOGIN:认证态伪会话升级为正式会话——
+// 落存储、换不透明 id、绑定当前连接(重连秘钥此刻才经 S2CSecret 事件下发)。
+// 认证期累积在伪会话上的身份信息(developer、oauth 回包带的 cookies)全部带走。
+// 入表不在本函数:随后的 uid cookie 经 Update→rebind 完成。
+func Login(sock *cosnet.Socket, p *session.Data) (data *session.Data, err error) {
+	guid := p.GetString(gwcfg.ServiceMetadataGUID)
+	_, data, err = Create(guid, p.Values())
+	if err != nil {
+		return nil, err
+	}
+	Replace(data, sock)
+	return data, nil
 }
 
 // Update 更新会话数据;uid 发生变化(首次选角/换角)时同步维护会话表
@@ -72,6 +126,11 @@ func Update(p *session.Data, vs values.Values) {
 // 推送/响应的 metadata 反复携带同一 uid 是常态,uid 未变的快路径在 Update 的
 // 锁内就地短路,走不到这里。
 func rebind(p *session.Data, oldUID, uid string) {
+	//认证态伪会话不进表:它没有存储背书,重连/按uid推送都不成立。正常流程到不了
+	//这里(选角回包在 forward 里先升级成正式会话、uid 才落表),纯防御
+	if !Logged(p) {
+		return
+	}
 	//先原子换入表项,再处置被挤出的会话:
 	//  - 换入到处置完成之间,按 uid 的推送已经落在新会话上,不会多指向老会话一小段;
 	//  - supersede 里的 sock.Replaced 会同步 Emit 走业务下发,期间表项必须已是新会话;
