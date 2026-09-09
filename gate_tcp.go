@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 
@@ -291,9 +292,7 @@ func (this *SocketRequest) Header() map[string]string {
 	if this.header == nil {
 		return r
 	}
-	for k, v := range this.header {
-		r[k] = v
-	}
+	maps.Copy(r, this.header)
 	return r
 }
 

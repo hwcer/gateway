@@ -20,6 +20,8 @@ func init() {
 
 const (
 	WS_Auth_Sec_WebSocket_Protocol = "auth"
+	// wssTokenMeta WSVerify→WSAccept 之间传递原始 token 的内部键(不出网关、不进业务 metadata)
+	wssTokenMeta = "_wss_token"
 )
 
 func WSVerify(_ http.ResponseWriter, r *http.Request) (meta map[string]string, err error) {
@@ -53,8 +55,14 @@ func WSVerify(_ http.ResponseWriter, r *http.Request) (meta map[string]string, e
 	if guid == "" {
 		return nil, nil
 	}
-	return map[string]string{gwcfg.ServiceMetadataGUID: guid}, nil
+	return map[string]string{gwcfg.ServiceMetadataGUID: guid, wssTokenMeta: token}, nil
 }
+
+// WSAccept token 重连要**还原原会话**而不是新建:带 token 重连的客户端是断线后
+// 自己回来的,凭 token 就能找回会话(含已选的 uid);新建会把原会话丢在表里、
+// 把客户端踢回选角界面——旧实现按 guid 复用会话,这条语义必须保住。
+// 还原走 players.Reconnect(Verify+Refresh+Replace+rebind),与新 secret 的下发
+// (S2CSecret)同 TCP 重连一套契约。
 func WSAccept(sock *cosnet.Socket, meta map[string]string) {
 	if len(meta) == 0 {
 		return
@@ -62,6 +70,12 @@ func WSAccept(sock *cosnet.Socket, meta map[string]string) {
 	guid, ok := meta[gwcfg.ServiceMetadataGUID]
 	if !ok {
 		return
+	}
+	if token := meta[wssTokenMeta]; token != "" {
+		if _, err := players.Reconnect(sock, token); err == nil {
+			return
+		}
+		//token 二次校验失败(理论上到不了,WSVerify 已拒过):退回新建保连接可用
 	}
 	value := gwcfg.Cookies.Filter(meta)
 	//顶号是 UID 级的,发生在选角回包落地时(见 players.rebind)——登录不做占用判断

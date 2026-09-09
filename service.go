@@ -46,7 +46,7 @@ func write(c *cosrpc.Context) any {
 func send(c *cosrpc.Context) any {
 	uid := c.GetMetadata(gwcfg.ServiceMetadataUID)
 	path := c.GetMetadata(gwcfg.ServiceMessagePath)
-	mate := values.Metadata(c.Metadata())
+	mate := c.Metadata()
 
 	var socketId uint64
 	if v := c.GetMetadata(gwcfg.ServiceMetadataSocketId); v != "" {
@@ -144,12 +144,12 @@ func broadcast(c *cosrpc.Context) any {
 	ignore := c.GetMetadata(gwcfg.ServiceMessageIgnore)
 	ignoreMap := make(map[string]struct{})
 	if ignore != "" {
-		arr := strings.Split(ignore, ",")
-		for _, v := range arr {
+		arr := strings.SplitSeq(ignore, ",")
+		for v := range arr {
 			ignoreMap[v] = struct{}{}
 		}
 	}
-	mate := values.Metadata(c.Metadata())
+	mate := c.Metadata()
 	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	flag.Set(message.FlagNoreply)
 	flag.Set(message.FlagBroadcast)

@@ -202,6 +202,41 @@ func TestReconnectAfterTakeover(t *testing.T) {
 	}
 }
 
+// TestWSSReconnectKeepsRole WSS 带 token 重连必须**还原原会话**(含已选 uid),
+// 不得新建——新建会把原会话丢在表里、把客户端踢回选角界面。
+// (WSAccept 收到的 meta 由 WSVerify 构造,这里直接手拼同款)
+func TestWSSReconnectKeepsRole(t *testing.T) {
+	ss := newTestSockets()
+	_, pa, stopA := loginTestPlayer(t, ss, "guid-wss")
+	defer stopA()
+	const uid = "8005"
+	players.Update(pa, values.Values{gwcfg.ServiceMetadataUID: uid})
+	if players.Get(uid) != pa {
+		t.Fatal("前提:选角后应入表")
+	}
+
+	secret, err := session.New(pa).Refresh()
+	if err != nil {
+		t.Fatalf("refresh error:%v", err)
+	}
+
+	sockB, stopB := newReplacedTestSocket(t, ss)
+	defer stopB()
+	WSAccept(sockB, map[string]string{
+		gwcfg.ServiceMetadataGUID: "guid-wss",
+		wssTokenMeta:              secret,
+	})
+	if got := sockB.Data(); got != pa {
+		t.Fatal("token 重连必须还原原会话,不得新建")
+	}
+	if players.Get(uid) != pa {
+		t.Fatal("原会话必须保持在表且指向新连接")
+	}
+	if !sockB.CanRead() || !sockB.CanWrite() {
+		t.Fatal("重连后的连接应正常工作")
+	}
+}
+
 // TestResolveTargetKeepsResponseWhole 请求驱动的推送必须回到发起它的那条连接。
 //
 // 🔴 钉的是顶号时"取 ROLE 信息只收到一半"的根因：业务服先推数据、再回确认包，

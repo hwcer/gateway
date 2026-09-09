@@ -98,6 +98,10 @@ func rebind(p *session.Data, oldUID string) {
 //    掉线通知因 uid 为空自然跳过,也不会误删新会话刚接手的频道成员。
 //
 // 老会话的表项不用显式摘:它的键就是这个 uid,马上被新会话覆盖。
+// ⚠️ Redis 后端分歧:此处对 values 的修改只落在内存副本、不写穿存储(Session 层
+// dirty-key 机制才写穿)。于是被接管会话的存储里 uid 仍在——它持 secret 重连会
+// 还原出带 uid 的副本并经 rebind 重新夺回角色(顶掉接管者,"后回来的秘钥赢")。
+// 内存后端无此分歧:uid 清掉就是存储里那份,重连落地为未选角(TestReconnectAfterTakeover)。
 // ⚠️ 本函数运行时**不持有任何会话锁**(sock.Replaced 会同步 Emit 走业务下发逻辑,
 // 塞进 p.Mutex 里迟早撞上重入死锁,与旧 negotiate 的约束一致)。
 func supersede(old *session.Data, uid string, neo *session.Data) {

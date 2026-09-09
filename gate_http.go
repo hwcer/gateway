@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"strconv"
@@ -321,9 +322,7 @@ func (this *HttpRequest) Header() map[string]string {
 	if this.header == nil {
 		return r
 	}
-	for k, v := range this.header {
-		r[k] = v
-	}
+	maps.Copy(r, this.header)
 	return r
 }
 func (this *HttpRequest) Session() *session.Data {
@@ -406,8 +405,8 @@ func (this *HttpRequest) getContentType(name string, split string) string {
 	if t == "" {
 		return ""
 	}
-	arr := strings.Split(t, split)
-	for _, s := range arr {
+	arr := strings.SplitSeq(t, split)
+	for s := range arr {
 		if b := binder.Get(s); b != nil {
 			return b.Name()
 		}
