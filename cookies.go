@@ -6,6 +6,7 @@ import (
 	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
@@ -39,6 +40,6 @@ func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32) {
 		}
 	}
 	if len(vs) > 0 {
-		p.Update(vs)
+		players.Update(p, vs) //uid 变更时同步维护 UID->GUID 映射
 	}
 }

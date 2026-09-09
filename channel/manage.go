@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/hwcer/cosgo/session"
-	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 	"github.com/hwcer/logger"
 )
 
@@ -82,31 +82,20 @@ func leave(p *session.Data, name, value string) {
 //	name - 频道名称
 //	value - 频道参数
 //
-// 只在频道成员中查找目标,不在频道内或频道不存在均视为成功(幂等)
+// 频道成员表与长链接绑定的是GUID,这里经 players 的 UID->GUID 映射定位会话。
+// 目标不在线或不在频道内均视为成功(幂等)
 func Kick(uid, name, value string) {
 	if uid == "" {
 		logger.Debug("channel Kick uid is empty name:%s value:%s", name, value)
 		return
 	}
-	room := Get(name, value)
-	if room == nil {
-		logger.Debug("channel Kick room not found name:%s value:%s", name, value)
-		return
-	}
-	var target *session.Data
-	room.Range(func(p *session.Data) bool {
-		if p.GetString(gwcfg.ServiceMetadataUID) == uid {
-			target = p
-			return false
-		}
-		return true
-	})
-	if target == nil {
-		logger.Debug("channel Kick player not in channel uid:%s name:%s value:%s", uid, name, value)
+	p := players.Get(players.GUID(uid))
+	if p == nil {
+		logger.Debug("channel Kick player offline uid:%s name:%s value:%s", uid, name, value)
 		return
 	}
 	logger.Debug("channel Kick uid:%s name:%s value:%s", uid, name, value)
-	Leave(target, name, value)
+	Leave(p, name, value)
 }
 func Range(name, value string, f func(*session.Data) bool) {
 	room := Get(name, value)

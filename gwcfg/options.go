@@ -27,6 +27,7 @@ const (
 	MessageBroadcast        = "broadcast"
 	MessageChannelDelete    = "channel/delete"
 	MessageChannelBroadcast = "channel/broadcast"
+	MessageChannelKick      = "channel/kick"
 )
 
 type protocol int8

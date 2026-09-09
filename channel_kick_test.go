@@ -4,12 +4,23 @@ import (
 	"testing"
 
 	"github.com/hwcer/cosgo/session"
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 )
 
-func newKickTestPlayer(uuid, uid string) *session.Data {
-	return session.NewData(uuid, map[string]any{gwcfg.ServiceMetadataUID: uid})
+func newKickTestPlayer(t *testing.T, guid, uid string) *session.Data {
+	t.Helper()
+	if session.Options.Storage == nil {
+		session.Options.Storage = session.NewMemory(16)
+	}
+	// 模拟真实登录:Login 会写 players 表并维护 UID->GUID 映射
+	_, p, err := players.Login(guid, values.Values{gwcfg.ServiceMetadataUID: uid})
+	if err != nil {
+		t.Fatalf("login error:%v", err)
+	}
+	return p
 }
 
 func channelMemberCount(name, value string) int {
@@ -25,13 +36,19 @@ func channelMemberCount(name, value string) int {
 	return n
 }
 
-// CookiesUpdate 里的 player.kick. 前缀最终走 channel.Kick,
-// 这里直接对核心逻辑做覆盖:踢人只移除目标,发起者与其他成员不受影响
+// player.kick. 前缀(CookiesUpdate)与 channel/kick RPC 最终都走 channel.Kick,
+// 这里对核心逻辑做覆盖:按UID踢人只移除目标,发起者与其他成员不受影响
 func TestChannelKick(t *testing.T) {
 	name, value := "kicktest", "room1"
-	leader := newKickTestPlayer("leader-guid", "1001")
-	member1 := newKickTestPlayer("member1-guid", "1002")
-	member2 := newKickTestPlayer("member2-guid", "1003")
+	leader := newKickTestPlayer(t, "leader-guid", "1001")
+	member1 := newKickTestPlayer(t, "member1-guid", "1002")
+	member2 := newKickTestPlayer(t, "member2-guid", "1003")
+	defer func() {
+		players.Delete(leader)
+		players.Delete(member1)
+		players.Delete(member2)
+		channel.Delete(name, value)
+	}()
 
 	channel.Join(leader, name, value)
 	channel.Join(member1, name, value)
@@ -52,17 +69,53 @@ func TestChannelKick(t *testing.T) {
 		t.Fatalf("发起者不应被移出频道")
 	}
 
-	// 幂等:踢不在频道内的玩家无事发生
+	// 幂等:踢不在线/不在频道内的玩家无事发生
 	channel.Kick("9999", name, value)
 	if n := channelMemberCount(name, value); n != 2 {
 		t.Fatalf("踢不存在玩家后成员数=%d, want 2", n)
 	}
 
-	// 空uid不误伤(不会踢中没设置uid的成员)
+	// 空uid不误伤
 	channel.Kick("", name, value)
 	if n := channelMemberCount(name, value); n != 2 {
 		t.Fatalf("空uid踢人后成员数=%d, want 2", n)
 	}
+}
 
-	channel.Delete(name, value)
+// UID->GUID 映射生命周期:换角解绑旧UID,下线解绑,UID转移后不误删新账号的映射
+func TestPlayersUIDMapping(t *testing.T) {
+	p := newKickTestPlayer(t, "guid-a", "2001")
+	defer players.Delete(p)
+
+	if g := players.GUID("2001"); g != "guid-a" {
+		t.Fatalf("映射未建立, GUID(2001)=%s", g)
+	}
+
+	// 换角:同账号重新登录切换角色,旧UID必须解绑,否则踢旧角色会误伤新会话
+	if _, p2, err := players.Login("guid-a", values.Values{gwcfg.ServiceMetadataUID: "2002"}); err != nil {
+		t.Fatalf("relogin error:%v", err)
+	} else if p2 != p {
+		t.Fatalf("同GUID重登应复用会话")
+	}
+	if g := players.GUID("2001"); g != "" {
+		t.Fatalf("换角后旧UID未解绑, GUID(2001)=%s", g)
+	}
+	if g := players.GUID("2002"); g != "guid-a" {
+		t.Fatalf("换角后新UID未绑定, GUID(2002)=%s", g)
+	}
+
+	// UID转移到别的账号:原会话下线不能删掉新账号的映射
+	_ = newKickTestPlayer(t, "guid-b", "2002")
+	pb := players.Get("guid-b")
+	defer players.Delete(pb)
+	players.Delete(p)
+	if g := players.GUID("2002"); g != "guid-b" {
+		t.Fatalf("UID转移后映射被误删, GUID(2002)=%s", g)
+	}
+
+	// 下线解绑
+	players.Delete(pb)
+	if g := players.GUID("2002"); g != "" {
+		t.Fatalf("下线后映射未解绑, GUID(2002)=%s", g)
+	}
 }

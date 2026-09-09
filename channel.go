@@ -74,3 +74,24 @@ func (this channelHandle) Delete(c *cosrpc.Context) any {
 	channel.Delete(name, value)
 	return nil
 }
+
+// Kick 将指定玩家踢出频道,S2S 直连命令(如世界服定时器里踢人,没有请求者回包可搭):
+// 被踢玩家由 metadata uid 指定,频道由 ServiceMessageChannel 指定
+func (this channelHandle) Kick(c *cosrpc.Context) any {
+	uid := c.GetMetadata(gwcfg.ServiceMetadataUID)
+	if uid == "" {
+		logger.Debug("频道踢人失败,uid不能为空")
+		return nil
+	}
+	s := c.GetMetadata(gwcfg.ServiceMessageChannel)
+	if s == "" {
+		logger.Debug("频道名不能为空")
+		return nil
+	}
+	name, value, err := context.ChannelNameParse(s)
+	if err != nil {
+		return err
+	}
+	channel.Kick(uid, name, value)
+	return nil
+}
