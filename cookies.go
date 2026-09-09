@@ -19,23 +19,19 @@ func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32) {
 		vs[gwcfg.ServiceMetadataRequestId] = i
 	}
 	for k, v := range cookie {
-		if strings.HasPrefix(k, gwcfg.ServicePlayerChannelJoin) {
-			k = strings.TrimPrefix(k, gwcfg.ServicePlayerChannelJoin)
-			channel.Join(p, k, v)
-		} else if strings.HasPrefix(k, gwcfg.ServicePlayerChannelLeave) {
-			k = strings.TrimPrefix(k, gwcfg.ServicePlayerChannelLeave)
-			channel.Leave(p, k, v)
-		} else if strings.HasPrefix(k, gwcfg.ServicePlayerChannelKick) {
+		//频道命令按前缀识别,rest 为去掉前缀后的频道名
+		if rest, ok := strings.CutPrefix(k, gwcfg.ServicePlayerChannelJoin); ok {
+			channel.Join(p, rest, v)
+		} else if rest, ok := strings.CutPrefix(k, gwcfg.ServicePlayerChannelLeave); ok {
+			channel.Leave(p, rest, v)
+		} else if rest, ok := strings.CutPrefix(k, gwcfg.ServicePlayerChannelKick); ok {
 			//踢的是别人:发起人(如会长)回包携带,value 编码为[频道值,被踢玩家UID]
-			k = strings.TrimPrefix(k, gwcfg.ServicePlayerChannelKick)
 			if value, uid, err := context.ChannelNameParse(v); err == nil {
-				channel.Kick(uid, k, value)
+				channel.Kick(uid, rest, value)
 			} else {
 				logger.Debug("channel Kick metadata parse error:%v", err)
 			}
-		} else if strings.HasPrefix(k, gwcfg.ServicePlayerSelector) {
-			vs[k] = v
-		} else if _, ok := gwcfg.Cookies[k]; ok {
+		} else if _, ok := gwcfg.Cookies[k]; ok || strings.HasPrefix(k, gwcfg.ServicePlayerSelector) {
 			vs[k] = v
 		}
 	}
