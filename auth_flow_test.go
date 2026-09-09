@@ -40,7 +40,7 @@ func TestS2CSecretTwoPhase(t *testing.T) {
 		t.Fatal("认证态会话不得下发秘钥")
 	}
 
-	if _, err := players.Login(sock, p); err != nil {
+	if _, _, err := players.Login(sock, p); err != nil {
 		t.Fatalf("login error:%v", err)
 	}
 	TCP.S2CSecret(sock, nil)

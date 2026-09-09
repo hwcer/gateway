@@ -33,6 +33,9 @@ type inbound interface {
 	login(guid string, value values.Values) (string, error) //通过业务服激活登录信息（gateway 内部）
 	logout() error                                          //退出登录（gateway 内部）
 	verify() (*session.Data, error)                         //验证登录信息（gateway 内部）
+	// retoken LOGIN(选角落地)升级换发的新 token 的投递:HTTP 写 Set-Cookie;
+	// 长连接空实现——players.Login 的 Replace 已触发 S2CSecret 推送
+	retoken(token string)
 }
 
 // recoverPanic 把 panic 收成 error 交回调用方，转发的两个入口各用一次。
@@ -134,16 +137,17 @@ func forward(proxy inbound, path string) (reply []byte, err error) {
 
 	// 更新用户会话的 cookies 信息
 	if p != nil {
-		//认证态(未落库)会话 + 选角回包(uid cookie) = 正式 LOGIN:升级为正式会话
-		//(落存储/换不透明id/下发重连秘钥)。必须先于 CookiesUpdate——uid 要落到
-		//正式会话上入表(rebind)才算数;也必须先于 Response——钩子里 c.Session()
-		//要读到升级后的会话。短连接没有 socket,不在这条路上(HTTP 的会话本就是正式的)
-		if sock := proxy.Socket(); sock != nil && !players.Logged(p) && res.GetString(gwcfg.ServiceMetadataUID) != "" {
-			real, err := players.Login(sock, p)
+		//认证态会话(TCP 内存伪会话/HTTP 确定性id会话) + 选角回包(uid cookie)
+		//= 正式 LOGIN:升级为不透明 id 的正式会话(落存储/删认证条目/绑定连接)。
+		//必须先于 CookiesUpdate——uid 要落到正式会话上入表(rebind)才算数;
+		//也必须先于 Response——钩子里 c.Session() 要读到升级后的会话
+		if players.AuthStage(p) && res.GetString(gwcfg.ServiceMetadataUID) != "" {
+			real, token, err := players.Login(proxy.Socket(), p)
 			if err != nil {
 				return nil, err
 			}
 			p = real
+			proxy.retoken(token)
 		}
 		CookiesUpdate(res, p, proxy.Index())
 	}

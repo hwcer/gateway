@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,18 +21,41 @@ import (
 // 没有任何"按账号查会话"的需求:**同账号多角色并行在线是合法状态**。
 // 顶号因此是 UID 级而不是账号级:登录不踢任何人,角色占用在选角回包落地时处理(见 rebind)。
 //
-// 长连接上的登录是**两段式**:
+// 长连接与短连接统一为**两段式登录**,认证都不算 LOGIN:
 //
-//	认证成功   → Auth:仅把 GUID 绑到 socket.Data(内存态,不落存储、不发秘钥)——
-//	             这不是 LOGIN,请求鉴权照常走 OAuth 档,角色级接口被 ErrNotSelectRole 挡住
-//	选角回包落地 → Login:升级为正式会话(落存储+换不透明id+绑定连接,此刻才下发
-//	             重连秘钥);uid cookie 随之经 Update→rebind 入表
+//	认证成功     TCP:Auth 仅把 GUID 绑到 socket.Data(内存态,不落存储、不发秘钥);
+//	             HTTP:CreateAuth 建认证态会话(含秘钥供 cookie 鉴权)但无角色,
+//	             永不入会话表
+//	选角回包落地  Login 升级为正式会话:落存储+绑定连接,长连接经 S2CSecret 下发
+//	             新秘钥、HTTP 换发 Set-Cookie。uid cookie 经 Update→rebind 入表
+//
+// 🔴 两阶段靠 values 里的 ServiceMetadataAuthStage 标记区分,**不能用 id 格式判**:
+// 内存后端的 storage.New 会把自定义 id 重写成分配的 token(NewMemorySetter
+// d.id=id),guid/随机段这类约定在内存后端根本存活不了。
 var players = sync.Map{}
 
-// Logged 会话是否已完成正式登录(LOGIN)。
-// 判据是会话持有秘钥:正式会话必经 Create→Refresh,秘钥一定存在;认证态伪会话
-// 不落存储、永不 Refresh——这个判据同时把 Redis 还原副本也判为已登录(存储里有秘钥)。
-func Logged(p *session.Data) bool {
+// authPending 认证态会话记账(guid → 会话):HTTP 每次认证建新前先删旧——
+// 同一账号任意时刻至多一条活跃认证态会话,无限刷认证也刷不出多条。
+// 内存后端键不可控(storage 重写 id),防刷只能靠这里;Redis 后端另有确定性 id
+// 覆盖(见 authID),这里是顺带把本进程的旧条目清掉
+var authPending = sync.Map{}
+
+// authID 认证态会话在 Redis 后端下的确定性 id:纯 guid——同账号重复认证
+// HMSET 覆盖同一条,跨网关进程也防得住刷。guid 里的 "/" 转义,避免与历史
+// 会话 id(guid/随机段)格式混淆
+func authID(guid string) string {
+	return strings.ReplaceAll(guid, "/", "%2F")
+}
+
+// AuthStage 会话是否仍处于认证阶段(未 LOGIN)。认证态不入会话表、不参与接管
+func AuthStage(p *session.Data) bool {
+	return p != nil && p.GetInt32(gwcfg.ServiceMetadataAuthStage) > 0
+}
+
+// Persistent 会话是否已落库且持有秘钥(可被 token 复原)。TCP 认证态伪会话不落
+// 存储,恒为 false——S2CSecret 据此跳过(否则会在伪会话上现生成不落库的废秘钥);
+// HTTP 认证会话与正式会话都是 true
+func Persistent(p *session.Data) bool {
 	return p != nil && p.GetString(session.TokenSecretName) != ""
 }
 
@@ -47,12 +71,11 @@ func newID(guid string) string {
 	return guid + "/" + hex.EncodeToString(b)
 }
 
-// Create 认证登录:新建会话并写入存储,返回 token。**不进会话表**。
+// Create 新建正式会话(不透明 id=guid/随机段)并写入存储,返回 token。**不进会话表**。
 //
+// 调用方:Login(选角落地的升级)与 WSS token 失效后的回退(Connect)。
 // guid 降级为会话 values 里的普通字段(ServiceMetadataGUID),业务侧经转发 metadata
-// 照常拿到。角色要等选角回包(CookiesUpdate→Update→rebind)落地才进表。
-// 与旧 Login 的区别:不再按 guid 复用会话、不再 Refresh 旧 TOKEN——
-// 同账号的每一次登录都是一个独立会话,互相不踢。
+// 照常拿到。角色要等 uid cookie 经 Update→rebind 落地才进表。
 func Create(guid string, value values.Values) (token string, data *session.Data, err error) {
 	data = session.NewData(newID(guid), value)
 	data.Set(gwcfg.ServiceMetadataGUID, guid)
@@ -67,7 +90,43 @@ func Create(guid string, value values.Values) (token string, data *session.Data,
 	return
 }
 
-// Auth 认证成功:仅把 GUID 绑到 socket.Data,**这不是 LOGIN**——
+// CreateAuth 认证登录(HTTP):建认证态会话——含秘钥(cookie 鉴权需要)但不含角色,
+// 永不入会话表;选角回包落地时经 Login 升级为正式会话,本条随之删除
+//(老 token 一并作废,新 token 由 retoken/S2CSecret 换发)。
+//
+// 防刷:同账号任意时刻至多一条活跃认证态会话——建新前先删旧(authPending 记账,
+// 内存后端 storage 会重写 id、键不可控,只能靠记账);Redis 后端另有确定性 id
+//(authID)跨进程覆盖同一条,双保险。
+func CreateAuth(guid string, value values.Values) (token string, data *session.Data, err error) {
+	if value == nil {
+		value = values.Values{}
+	}
+	value.Set(gwcfg.ServiceMetadataGUID, guid)
+	value.Set(gwcfg.ServiceMetadataAuthStage, int32(1))
+	data = session.NewData(authID(guid), value)
+	ss := session.New(data)
+	if token, err = ss.New(data); err != nil {
+		return
+	}
+	ss.Release() //秘钥写穿(同 Create)
+	//记账:同账号只保留最新一条,并发认证靠 CAS 重试兜住
+	for {
+		actual, loaded := authPending.LoadOrStore(guid, data)
+		if !loaded {
+			break
+		}
+		old, _ := actual.(*session.Data)
+		if old == nil || old == data {
+			break
+		}
+		session.New(old).Delete()
+		if authPending.CompareAndSwap(guid, old, data) {
+			break
+		}
+	}
+	return
+}
+// Auth 认证成功(TCP):仅把 GUID 绑到 socket.Data,**这不是 LOGIN**——
 // 不建会话、不落存储、不下发秘钥。正式会话要等选角回包落地(见 Login),
 // 这一段里连接上只有账号身份:请求鉴权照常(OAuth 档),角色级接口被
 // ErrNotSelectRole 挡住,心跳由网关自己应答。
@@ -79,25 +138,33 @@ func Auth(sock *cosnet.Socket, guid string, value values.Values) (*session.Data,
 		}
 		return p, nil
 	}
-	p := session.NewData(guid, value) //id=guid 仅日志可读,不落存储
+	p := session.NewData(authID(guid), value) //不落存储,id 仅日志可读
 	p.Set(gwcfg.ServiceMetadataGUID, guid)
+	p.Set(gwcfg.ServiceMetadataAuthStage, int32(1))
 	//Authentication 事件照发(S2CSecret 对未落库会话自然跳过),连接从此带上身份
 	sock.Authentication(p)
 	return p, nil
 }
 
-// Login 选角回包落地 = 正式 LOGIN:认证态伪会话升级为正式会话——
-// 落存储、换不透明 id、绑定当前连接(重连秘钥此刻才经 S2CSecret 事件下发)。
-// 认证期累积在伪会话上的身份信息(developer、oauth 回包带的 cookies)全部带走。
+// Login 选角回包落地 = 正式 LOGIN:认证态会话(TCP 内存伪会话/HTTP 存储认证会话)
+// 升级为不透明 id 的正式会话——落存储、绑定当前连接(长连接的新秘钥此刻才经
+// S2CSecret 事件下发,HTTP 由调用方用返回的 token 换发 Set-Cookie)。
+// 认证期累积的身份信息(developer、oauth cookies)全部带走;HTTP 的认证态存储
+// 条目随之删除,老 token 复原不出任何东西。
 // 入表不在本函数:随后的 uid cookie 经 Update→rebind 完成。
-func Login(sock *cosnet.Socket, p *session.Data) (data *session.Data, err error) {
+func Login(sock *cosnet.Socket, p *session.Data) (data *session.Data, token string, err error) {
 	guid := p.GetString(gwcfg.ServiceMetadataGUID)
-	_, data, err = Create(guid, p.Values())
+	value := p.Values()
+	delete(value, gwcfg.ServiceMetadataAuthStage) //剥认证标记:升级产物是正式会话
+	token, data, err = Create(guid, value)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	Replace(data, sock)
-	return data, nil
+	//删认证态条目与记账:TCP 伪会话不在存储,Delete 即 no-op
+	session.New(p).Delete()
+	authPending.Delete(guid)
+	Replace(data, sock) //sock 为 nil(HTTP)时跳过连接绑定
+	return data, token, nil
 }
 
 // Update 更新会话数据;uid 发生变化(首次选角/换角)时同步维护会话表
@@ -126,9 +193,9 @@ func Update(p *session.Data, vs values.Values) {
 // 推送/响应的 metadata 反复携带同一 uid 是常态,uid 未变的快路径在 Update 的
 // 锁内就地短路,走不到这里。
 func rebind(p *session.Data, oldUID, uid string) {
-	//认证态伪会话不进表:它没有存储背书,重连/按uid推送都不成立。正常流程到不了
-	//这里(选角回包在 forward 里先升级成正式会话、uid 才落表),纯防御
-	if !Logged(p) {
+	//认证态会话不进表:它不是 LOGIN 的产物,按 uid 推送/接管对它都不成立。
+	//正常流程到不了这里(选角回包在 forward 里先升级成正式会话、uid 才落表),纯防御
+	if AuthStage(p) {
 		return
 	}
 	//先原子换入表项,再处置被挤出的会话:
@@ -146,6 +213,12 @@ func rebind(p *session.Data, oldUID, uid string) {
 				displaced = os
 			}
 		}
+		//uid 变更写穿存储:HTTP+Redis 下会话每个请求都从存储新建副本,uid 不落盘
+		//的话下一个请求就回到未选角。选角/换角是稀有事件,这点写放大可忽略;
+		//内存后端的 Storage.Update 是 no-op
+		ss := session.New(p)
+		ss.Update(values.Values{gwcfg.ServiceMetadataUID: uid})
+		ss.Release()
 	}
 	if oldUID != "" {
 		//归属校验的原子版:只有表项仍指向本会话才摘,不能误摘别人的表项

@@ -201,28 +201,38 @@ type HttpRequest struct {
 	path     string
 }
 
-// login 登录（gateway 内部）
+// login 认证（gateway 内部）:建**确定性 id** 的认证态会话(见 players.CreateAuth)
+// ——同账号重复认证覆盖同一条存储,无限刷认证也刷不出多条会话;含秘钥(cookie
+// 鉴权需要)但无角色,不算 LOGIN。正式会话在选角回包落地时经 players.Login
+// 升级建立,token 由 retoken 换发。
 //
 // 顶号是 UID 级的（见 players.rebind），登录阶段不做占用判断。
-// ⚠️ 也不再收掉会话上的老长连接——多角色并行下那可能是**同一账号另一个角色**
+// ⚠️ 也不再收掉会话上的老长连接——多角色并行下那可能是**同账号另一个角色**
 // 正在游戏的活连接，旧账号级顶号语义里"短连接登录踢掉长连接"的行为一并作废。
 func (this *HttpRequest) login(guid string, value values.Values) (token string, err error) {
 	var data *session.Data
-	token, data, err = players.Create(guid, value)
+	token, data, err = players.CreateAuth(guid, value)
 	if err != nil {
 		return
 	}
+	this.setCookie(token)
+	this.Context.Session = session.New(data)
+	return
+}
 
-	// 设置cookie
+// retoken LOGIN(选角落地)换发的新 token:老 cookie 指向已删除的认证态会话,
+// 不换发的话客户端下一个请求就得重新认证
+func (this *HttpRequest) retoken(token string) {
+	this.setCookie(token)
+}
+
+// setCookie 写会话 cookie 与透传响应头(oauth 与 LOGIN 换发共用)
+func (this *HttpRequest) setCookie(token string) {
 	cookie := &http.Cookie{Name: session.Options.Name, Path: "/", Value: token}
 	http.SetCookie(this.Context.Response, cookie)
-	// 设置响应头
 	header := this.Context.Header()
 	header.Set("X-Forwarded-Key", session.Options.Name)
 	header.Set("X-Forwarded-Val", cookie.Value)
-	//this.cookie = cookie
-	this.Context.Session = session.New(data)
-	return
 }
 
 // logout 登出（gateway 内部）

@@ -74,9 +74,9 @@ func Connect(sock *cosnet.Socket, guid string, value values.Values) (data *sessi
 // 等满协商期才能回到游戏——重连体验直接崩掉。token 登录协商、secret 重连直通，
 // 两条路径本来就是分开的，天然可分。
 func Reconnect(sock *cosnet.Socket, secret string) (data *session.Data, err error) {
-	//已正式登录才视为"在线直接返回";认证态伪会话不算——继续走 secret 验证,
+	//已落库的会话才视为"在线直接返回";TCP 认证态伪会话不算——继续走 secret 验证,
 	//验过即整段接管(伪会话被 Replace 覆盖)
-	if data = sock.Data(); data != nil && Logged(data) {
+	if data = sock.Data(); data != nil && Persistent(data) {
 		return //已在线,直接返回现有会话,避免调用方对 nil 解引用
 	}
 	s := session.New()

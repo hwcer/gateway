@@ -148,7 +148,7 @@ func (this *TcpServer) S2CSecret(sock *cosnet.Socket, _ any) {
 	}
 	//认证态会话(未落库)没有秘钥:选角落地(LOGIN)时 Replace 会再次触发本事件,
 	//这里跳过——否则 Token() 会在伪会话上现生成一个不落存储的废秘钥发给客户端
-	if !players.Logged(data) {
+	if !players.Persistent(data) {
 		return
 	}
 	ss := session.New(data)
@@ -226,6 +226,10 @@ func (this *SocketRequest) verify() (*session.Data, error) {
 func (this *SocketRequest) login(guid string, value values.Values) (token string, err error) {
 	_, err = players.Auth(this.Context.Socket, guid, value)
 	return "", err
+}
+
+// retoken 长连接不需要换发:LOGIN 时 Replace 触发的 S2CSecret 已把新秘钥推给客户端
+func (this *SocketRequest) retoken(token string) {
 }
 
 // logout 登出（gateway 内部）

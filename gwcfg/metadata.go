@@ -19,6 +19,10 @@ const (
 	ServicePlayerLogout = "_player_logout"
 	ServicePlayerCookie = "_player_cookie"
 
+	// ServiceMetadataAuthStage 认证阶段标记(gateway 内部,两段式登录用):
+	// 认证态会话置 1,LOGIN(选角落地)升级时剥掉。不在 Cookies 白名单,不随转发外泄
+	ServiceMetadataAuthStage = "_auth_stage"
+
 	// 频道命令统一编码:key = 前缀 + ["name","value"](JSON),频道身份由key表达;
 	// value 仅 Kick 使用(被踢玩家UID),Join/Leave 为空
 	ServicePlayerChannelJoin  = "player.join."     //加入频道
