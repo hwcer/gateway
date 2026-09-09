@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/hwcer/cosgo/session"
+	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/logger"
 )
 
@@ -21,7 +22,9 @@ func New(name string, fixed bool) *Channel {
 }
 
 type Channel struct {
-	id       string
+	id string
+	// ps 成员表:UID(角色ID) -> 会话。频道一律按UID绑定——一个账号可能有多个角色,
+	// 分属不同频道;同一时间一个会话只代表一个在线角色。
 	ps       map[string]*session.Data
 	fixed    bool //固定频道不会自动删除
 	locker   sync.RWMutex
@@ -32,10 +35,11 @@ func (this *Channel) Id() string {
 	return this.id
 }
 
-func (this *Channel) Join(d *session.Data) bool {
+// Join 会话入房,uid 为成员键(由 manage.Join 保证非空)
+func (this *Channel) Join(uid string, d *session.Data) bool {
 	// 快速路径检查：使用读锁检查玩家是否已经在频道中
 	this.locker.RLock()
-	exists := this.ps[d.UUID()] != nil
+	exists := this.ps[uid] != nil
 	released := this.released
 	this.locker.RUnlock()
 
@@ -52,23 +56,31 @@ func (this *Channel) Join(d *session.Data) bool {
 	if this.released {
 		return false
 	}
-	if _, exists := this.ps[d.UUID()]; exists {
+	if _, exists := this.ps[uid]; exists {
 		return true
 	}
-	this.ps[d.UUID()] = d
+	this.ps[uid] = d
 	return true
 }
 
-func (this *Channel) Leave(d *session.Data) bool {
+// Member 按UID取频道内的成员会话,不在频道内返回nil
+func (this *Channel) Member(uid string) *session.Data {
+	this.locker.RLock()
+	defer this.locker.RUnlock()
+	return this.ps[uid]
+}
+
+// Leave 按UID移除成员
+func (this *Channel) Leave(uid string) bool {
 	this.locker.Lock()
 	defer this.locker.Unlock()
 
 	// 检查玩家是否在频道中
-	if _, exists := this.ps[d.UUID()]; !exists {
+	if _, exists := this.ps[uid]; !exists {
 		return false
 	}
 
-	delete(this.ps, d.UUID())
+	delete(this.ps, uid)
 	if !this.fixed && len(this.ps) == 0 {
 		this.released = true
 		manage.Delete(this.id)
@@ -118,4 +130,9 @@ func (this *Channel) Broadcast(path string, data []byte) {
 		SendMessage(p, path, data)
 		return true
 	})
+}
+
+// uidOf 读取会话当前的角色ID
+func uidOf(d *session.Data) string {
+	return d.GetString(gwcfg.ServiceMetadataUID)
 }

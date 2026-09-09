@@ -5,6 +5,7 @@ import (
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
+	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/gwcfg"
 )
 
@@ -47,8 +48,11 @@ func syncUID(p *session.Data, oldUID string) {
 		}
 		return
 	}
+	// 换角:旧UID解绑。频道成员一律按UID绑定,旧角色的频道身份也要一并清理,
+	// 否则换角后旧公会的广播还会推给新角色
 	if oldUID != "" {
 		uids.Delete(oldUID)
+		channel.SwitchUID(p, oldUID)
 	}
 	if uid != "" {
 		uids.Store(uid, p.UUID())
@@ -64,8 +68,16 @@ func Get(uuid string) *session.Data {
 	return p
 }
 
+func GetWithUid(uid string) *session.Data {
+	uuid := GUID(uid)
+	if uuid == "" {
+		return nil
+	}
+	return Get(uuid)
+}
+
 func Range(fn func(*session.Data) bool) {
-	players.Range(func(k, v interface{}) bool {
+	players.Range(func(k, v any) bool {
 		if p, ok := v.(*session.Data); ok {
 			return fn(p)
 		}

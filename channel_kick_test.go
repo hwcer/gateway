@@ -119,3 +119,37 @@ func TestPlayersUIDMapping(t *testing.T) {
 		t.Fatalf("下线后映射未解绑, GUID(2002)=%s", g)
 	}
 }
+
+// 频道一律按UID绑定:换角(会话uid变更)时,旧角色的频道身份必须整体清理,
+// 否则换角后旧公会的广播还会推给新角色
+func TestChannelSwitchUID(t *testing.T) {
+	name, value := "switchtest", "room1"
+	p := newKickTestPlayer(t, "guid-switch", "4001")
+	defer players.Delete(p)
+
+	channel.Join(p, name, value)
+	if n := channelMemberCount(name, value); n != 1 {
+		t.Fatalf("join后成员数=%d, want 1", n)
+	}
+
+	// 换角重登:同一账号切换到另一个角色
+	if _, p2, err := players.Login("guid-switch", values.Values{gwcfg.ServiceMetadataUID: "4002"}); err != nil {
+		t.Fatalf("relogin error:%v", err)
+	} else if p2 != p {
+		t.Fatalf("同GUID重登应复用会话")
+	}
+
+	if n := channelMemberCount(name, value); n != 0 {
+		t.Fatalf("换角后旧角色仍在频道,成员数=%d", n)
+	}
+	if _, ok := channel.NewSetter(p).Get(name); ok {
+		t.Fatalf("换角后会话频道记录未清理")
+	}
+
+	// 新角色重新入房,以新UID为成员键
+	channel.Join(p, name, value)
+	if n := channelMemberCount(name, value); n != 1 {
+		t.Fatalf("新角色入房后成员数=%d, want 1", n)
+	}
+	channel.Delete(name, value)
+}
