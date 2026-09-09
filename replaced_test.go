@@ -230,8 +230,8 @@ func TestResolveTargetByUID(t *testing.T) {
 	}
 	defer players.Delete(players.Get(guid))
 
-	//UID 反查链路:UID -> GUID -> 会话 -> 连接
-	p := players.Get(players.GUID("3001"))
+	//UID 反查链路:UID -> GUID -> 会话 -> 连接(send 走的就是 GetWithUid)
+	p := players.GetWithUid("3001")
 	if p == nil {
 		t.Fatal("UID 反查映射未建立")
 	}
