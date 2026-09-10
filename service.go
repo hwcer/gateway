@@ -31,7 +31,7 @@ func Register(i any, prefix ...string) {
 	}
 }
 
-// Deprecated: 用 send。定位规则已经统一——socketId 与 GUID 二选一，socketId 优先，
+// Deprecated: 用 send。定位规则已经统一——socketId 与会话二选一，socketId 优先，
 // write 只是"只有 socketId"的那个特例，没有必要单独存在。保留只为兼容既有调用方。
 func write(c *cosrpc.Context) any {
 	return send(c)
@@ -39,42 +39,27 @@ func write(c *cosrpc.Context) any {
 
 // send 消息推送。
 //
-// **定位优先级：socketId > GUID > UID**。socketId 定位连接（见 resolveTarget）；
-// 会话定位在本函数：GUID 直查会话表，定位不到或只有 UID 时经全局映射反查 GUID
-// （长链接绑定的是 GUID，一个账号可能有多个角色，映射保证落在当前在线的角色上）。
-// 按 GUID 定位到会话且带了 UID 时会用 UID 校验归属——顶号/换角后同一 GUID 上挂的
-// 可能已经是另一个 uid，不校验就是发错人；只带 socketId 的那种（典型是登录接口
-// 本身，那时还没有会话）直接投给那条连接。
+// **定位优先级：socketId > UID**。socketId 定位连接（见 resolveTarget）；
+// 会话按 UID 直查会话表——表键就是 uid，定位不到即角色不在线。
+// 只带 socketId 的那种（典型是登录/选角接口本身，那时还没有 uid）直接投给那条连接。
+// GUID 只是随行的业务身份信息，不参与定位。
 func send(c *cosrpc.Context) any {
 	uid := c.GetMetadata(gwcfg.ServiceMetadataUID)
-	guid := c.GetMetadata(gwcfg.ServiceMetadataGUID)
 	path := c.GetMetadata(gwcfg.ServiceMessagePath)
-	mate := values.Metadata(c.Metadata())
+	mate := c.Metadata()
 
 	var socketId uint64
 	if v := c.GetMetadata(gwcfg.ServiceMetadataSocketId); v != "" {
-		socketId, _ = strconv.ParseUint(v, 10, 64) //解析失败按 0 处理,退化成纯 GUID 推送
+		socketId, _ = strconv.ParseUint(v, 10, 64) //解析失败按 0 处理,退化成纯会话推送
 	}
 
-	// **GUID 是用来更新用户信息的，不是用来定位连接的**（定位见 resolveTarget，socketId 优先）。
-	// 所以会话取不到并不代表这条消息发不出去：登录途中、会话刚被清理，只要 socketId 指的
+	// 会话取不到并不代表这条消息发不出去：登录途中、会话刚被清理，只要 socketId 指的
 	// 那条连接还在，照投——早先这里 p==nil 就直接丢弃，等于让 socketId 优先这条规则失效。
 	var p *session.Data
-	if guid != "" {
-		p = players.Get(guid)
-	}
-	if p == nil && uid != "" {
-		//UID 反查:优先级排在 GUID 之后,定位不到会话再经全局映射换算
-		p = players.GetWithUid(uid)
+	if uid != "" {
+		p = players.Get(uid)
 	}
 	if p != nil {
-		//顶号/换角色后同一 GUID 上挂的可能已经是另一个 uid,不校验就是发错人
-		if uid != "" {
-			if id := p.GetString(gwcfg.ServiceMetadataUID); id != "" && id != uid {
-				logger.Debug("用户UID不匹配,UID:%s GUID:%s", uid, guid)
-				return nil
-			}
-		}
 		if _, ok := mate[gwcfg.ServicePlayerLogout]; ok {
 			players.Delete(p)
 			return nil
@@ -85,24 +70,24 @@ func send(c *cosrpc.Context) any {
 
 	sock := resolveTarget(p, socketId)
 	if sock == nil {
-		logger.Debug("长链接不在线,消息丢弃,UID:%s GUID:%s Socket:%d PATH:%s ", uid, guid, socketId, path)
+		logger.Debug("长链接不在线,消息丢弃,UID:%s Socket:%d PATH:%s ", uid, socketId, path)
 		return nil
 	}
 	return deliver(c, sock)
 }
 
 // resolveTarget 定位推送目标连接：**socketId 与会话二选一，socketId 优先**。
-// （会话本身由 send 按 GUID/UID 定位，UID 走全局映射反查；这里只管"会话 → 连接"）
+// （会话本身由 send 按 UID 定位；这里只管"会话 → 连接"）
 //
-//	p        按 GUID/UID 找到的会话，可为 nil
+//	p        按 UID 找到的会话，可为 nil
 //	socketId 发起这次请求的连接 id，0 表示"不是请求驱动的推送"
 //
 // 规则背后是一条不变量：**请求驱动的推送必须回到发起它的那条连接**。
 //
 // Forward 每次转发都带上 socketId，业务服推消息时原样带回。认 socketId 而不是回落到
-// GUID，代次隔离就是白送的：顶号或重连之后那条连接要么还在（顶号存活期内它 Closing
+// 会话，代次隔离就是白送的：顶号或重连之后那条连接要么还在（存活期内它 Closing
 // 但仍可写，推送与确认包一起回到老连接）、要么已经销毁（投不出去，丢弃）——
-// **绝不会改投到新端**。按 GUID 投才会：上一代连接的数据推给刚上来的另一个人，
+// **绝不会改投到新端**。按会话投才会：上一代连接的数据推给刚上来的另一个人，
 // 而那次请求的确认包走的是请求自己的 socket，一次响应被劈成两半，两头都拿不全。
 // 这正是顶号时"取 ROLE 信息只收到一半"的根因。
 //
@@ -123,7 +108,7 @@ func resolveTarget(p *session.Data, socketId uint64) *cosnet.Socket {
 }
 
 // deliver 把消息投递到**指定连接**：过一遍业务 Response 钩子(加密/改包/改 flag),再带上请求号发出。
-// 只管发,不管"这条连接怎么找到的"——定位逻辑在 write(按 socket id)/send(按 GUID)里。
+// 只管发,不管"这条连接怎么找到的"——定位逻辑在 send(按 socketId/uid)里。
 func deliver(c *cosrpc.Context, sock *cosnet.Socket) any {
 	path := c.GetMetadata(gwcfg.ServiceMessagePath)
 	if path == "" {
@@ -159,12 +144,12 @@ func broadcast(c *cosrpc.Context) any {
 	ignore := c.GetMetadata(gwcfg.ServiceMessageIgnore)
 	ignoreMap := make(map[string]struct{})
 	if ignore != "" {
-		arr := strings.Split(ignore, ",")
-		for _, v := range arr {
+		arr := strings.SplitSeq(ignore, ",")
+		for v := range arr {
 			ignoreMap[v] = struct{}{}
 		}
 	}
-	mate := values.Metadata(c.Metadata())
+	mate := c.Metadata()
 	flag := message.Flag(mate.GetInt32(gwcfg.ServiceResponseFlag))
 	flag.Set(message.FlagNoreply)
 	flag.Set(message.FlagBroadcast)
@@ -180,13 +165,12 @@ func broadcast(c *cosrpc.Context) any {
 		body, _ = ctx.Buffer()
 	}
 
+	// 只发**已选角**的会话:广播都是玩法/运营语义,未选角的连接(还停在登录/选角界面)
+	// 收到也没有意义——会话表(键=uid)就是"在线角色"集合,遍历它正合适。
 	players.Range(func(p *session.Data) bool {
-		uid := p.GetString(gwcfg.ServiceMetadataUID)
-		if _, ok := ignoreMap[uid]; ok {
+		if _, ok := ignoreMap[p.GetString(gwcfg.ServiceMetadataUID)]; ok {
 			return true
 		}
-		//CookiesUpdate(mate, p)
-		//Emitter.emit(EventTypeBroadcast, p, path, nil)
 		if sock := players.Socket(p); sock != nil {
 			_ = sock.Send(flag, 0, path, body, false)
 		}

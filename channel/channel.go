@@ -91,7 +91,9 @@ func (this *Channel) Leave(uid string) bool {
 	delete(this.ps, uid)
 	if !this.fixed && len(this.ps) == 0 {
 		this.released = true
-		manage.Delete(this.id)
+		//不能用manage.Delete(name,value):this.id已是"name.value"复合键,再拼一次会错键;
+		//且Delete内部会调room.Release()再拿本写锁,自死锁。直接原子摘除本实例
+		manage.CompareAndDelete(this.id, this)
 		logger.Debug("人数为空，房间销毁:%s", this.id)
 	}
 	return true

@@ -27,7 +27,8 @@ func ChannelNameParse(s string) (k, v string, err error) {
 		return
 	}
 	if len(r) < 2 {
-		err = fmt.Errorf("channel Broadcast args error :%s", s)
+		//必须return:继续执行r[0]/r[1]会越界panic,该值来自后端metadata,不可信
+		return "", "", fmt.Errorf("channel Broadcast args error :%s", s)
 	}
 	k = r[0]
 	v = r[1]

@@ -126,7 +126,12 @@ func forward(proxy inbound, path string) (reply []byte, err error) {
 	if guid, ok := res[gwcfg.ServicePlayerLogin]; ok {
 		//秘钥不回写 res:长连接由 S2CSecret 事件下发,短连接由 login 写进 cookie,都不走回包。
 		//业务层要用这次新建的会话,在 Response 钩子里 c.Session() 取即可——它排在这之后。
-		if _, err = proxy.login(guid, gwcfg.Cookies.Filter(res)); err != nil {
+		//uid 从登录值里剥掉:角色入表必须走 CookiesUpdate→rebind 这唯一一条路,
+		//才能被下面的顶号协商(negotiate)拦住——直接随登录值落进会话的话,
+		//首次选角就绕过了占用判定
+		value := gwcfg.Cookies.Filter(res)
+		delete(value, gwcfg.ServiceMetadataUID)
+		if _, err = proxy.login(guid, value); err != nil {
 			return nil, err
 		}
 		p = proxy.Session()
@@ -142,6 +147,15 @@ func forward(proxy inbound, path string) (reply []byte, err error) {
 
 	// 更新用户会话的 cookies 信息
 	if p != nil {
+		// UID 级顶号协商:回包携带的 uid 与会话当前 uid 不同(首次选角/换角)时,
+		// 目标角色可能已被别的在线会话占用——按 Setting.ForceReplace 决定强制接管
+		// 还是拒绝本次登录(ErrReplaced)。必须在 CookiesUpdate **之前**:被拒不落 uid,
+		// 老会话毫发无损。uid 未变的常态响应在判等处就地短路
+		if uid := res.GetString(gwcfg.ServiceMetadataUID); uid != "" && uid != p.GetString(gwcfg.ServiceMetadataUID) {
+			if err = negotiate(uid, proxy.RemoteAddr(), proxy.Socket()); err != nil {
+				return nil, err
+			}
+		}
 		CookiesUpdate(res, p, proxy.Index())
 	}
 	//Response 排在登录/登出之后:钩子里 c.Session() 要读到这次新建的会话

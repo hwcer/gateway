@@ -6,6 +6,7 @@ import (
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
+	"github.com/hwcer/gateway/gwcfg"
 )
 
 const (
@@ -21,9 +22,11 @@ func Socket(p *session.Data) *cosnet.Socket {
 	return r
 }
 
-// Negotiate 顶号：通知老连接进入"只收不发"的存活期，返回它的剩余存活秒数和它的 IP。
+// Negotiate UID 级顶号协商：查出占用目标角色的老会话并处置其连接，
+// 返回它的剩余存活秒数和它的 IP。
 //
-// 返回 0 表示没有活着的老连接（或就是这条连接自己在重复登录），新端可以直接上线。
+// 返回 0 表示没有活着的老连接（角色不在线 / 老连接已死 / 就是这条连接自己在
+// 重复登录），新端可以直接落地。
 //
 // ⚠️ **要不要让新端等这段时间，是策略，不在这一层**。这里只负责处置老连接：
 // 它进入存活期后，在途回包与服务器推送照常送达，它自己发来的新请求一律被回 209
@@ -31,16 +34,16 @@ func Socket(p *session.Data) *cosnet.Socket {
 // 由网关层按 Setting.ForceReplace 决定——players 是 gateway 的子包，读不到那个配置，
 // 这个分层也正好让"处置老连接"和"放不放新端进来"各自独立。
 //
-// ⚠️ 必须在 Login **之前**调用。Login 的 loaded 分支会 p.Update(value) 用新登录者的数据
-// 覆盖老会话，还会 ss.Refresh() 强制旧 TOKEN 失效——协商模式下顶号被拒却把老玩家的
-// secret 作废了，他连断线重连都回不来，等于"不许顶号"反而把人踢得更彻底。
+// ⚠️ 必须在 uid 落地（forward 里的 CookiesUpdate→rebind）**之前**调用。
+// rebind 的 Swap+supersede 会顶掉老会话、清掉它的 uid——协商模式下顶号被拒却把
+// 老玩家的角色夺走，等于"不许顶号"反而把人踢得更彻底。
 //
 // ⚠️ 在会话锁**外面**调用 os.Replaced：它会 Emit 事件同步走到业务层的下发逻辑，
 // 塞进 p.Mutex 里迟早撞上重入死锁。
-func Negotiate(guid, ip string, sock *cosnet.Socket) (countdown int32, address string) {
-	p := Get(guid)
+func Negotiate(uid, ip string, sock *cosnet.Socket) (countdown int32, address string) {
+	p := Get(uid)
 	if p == nil {
-		return 0, "" //从没登录过
+		return 0, "" //角色不在线
 	}
 	os := Socket(p)
 	if os == nil || !os.CanWrite() {
@@ -51,8 +54,8 @@ func Negotiate(guid, ip string, sock *cosnet.Socket) (countdown int32, address s
 	}
 	os.Replaced(stripPort(ip)) //已在存活期内则内部返回 false：不重复通知，也不重置倒计时
 
-	//两个方向的 IP 别搞反：传进来的 ip 是**新端**的，发给老连接（"你的账号在 xxx 登录"）；
-	//返回的 address 是**老连接**的，发给被拒的新端（"账号正在 xxx 在线"）。
+	//两个方向的 IP 别搞反：传进来的 ip 是**新端**的，发给老连接（"你的角色在 xxx 登录"）；
+	//返回的 address 是**老连接**的，发给被拒的新端（"角色正在 xxx 在线"）。
 	if addr := os.RemoteAddr(); addr != nil {
 		address = stripPort(addr.String())
 	}
@@ -69,10 +72,10 @@ func stripPort(addr string) string {
 
 // Replace 把会话绑定到新连接；老连接（若还在）立即进入关闭流程。
 //
-// 走到这里时"该不该换人"已经判完了：token 登录由 Negotiate 挡在前面（老连接活着根本到不了这），
-// secret 重连则是同一个客户端自己回来、直接接管。所以对老连接是**立即关**而不是发起协商——
-// 会话已经改指向新连接，老的那条再留着也收不到任何推送（send 按 GUID 查到的已经是新 socket），
-// 纯僵尸，没有留一个协商期的意义。
+// 走到这里时"该不该换人"已经判完了：登录阶段没有占用判断（登录不踢人，
+// 见 players.Create），secret 重连则是同一个客户端自己回来、直接接管。所以对老连接
+// 是**立即关**而不是发起协商——会话已经改指向新连接，老的那条再留着也收不到任何推送
+// （send 按会话查到的已经是新 socket），纯僵尸，没有留一个协商期的意义。
 //
 // ⚠️ 这里只能用 Close 这种"纯状态切换"的操作。同步断开会 Emit 到 Disconnect，
 // 那里还要再拿一次会话锁 —— 而这整段跑在 p.Mutex 里，sync.Mutex 不可重入，必死锁。
@@ -91,23 +94,22 @@ func Replace(p *session.Data, sock *cosnet.Socket) {
 	})
 }
 
-// Connect 长连接登录（token 路径）：建立/复用会话并绑定到这条连接。
+// Connect 长连接登录（token 路径）：新建会话（id=guid，见 Create）并绑定到这条连接。
 //
-// ⚠️ **它自己不做顶号判断**。调用方必须先过网关层的 negotiate——那里才拿得到
-// Setting.ForceReplace，也才决定得了"老连接还活着时新端能不能进来"。
-// 直接调这个函数等于无条件强制顶号。
+// 建会话阶段没有任何"占用"判断——同账号多角色并行是合法状态，
+// 角色级顶号在选角回包落地时发生（见 rebind）。
 func Connect(sock *cosnet.Socket, guid string, value values.Values) (data *session.Data, err error) {
-	if _, data, err = Login(guid, value); err == nil {
+	if _, data, err = Create(guid, value); err == nil {
 		Replace(data, sock)
 	}
 	return
 }
 
-// Reconnect 断线重连（secret 路径）：**不走顶号协商**，直接接管。
+// Reconnect 断线重连（secret/token 路径）：**不走顶号协商**，直接接管。
 //
 // 持有 secret 就是同一个客户端实例自己回来了，不是别人来抢。而且闪断时老 socket 往往
 // 还没被心跳判死（要等 SocketConnectTime），若这条路也排协商队，每次正常重连都得
-// 等满协商期才能回到游戏——重连体验直接崩掉。token 登录协商、secret 重连直通，
+// 等满协商期才能回到游戏——重连体验直接崩掉。登录协商、secret 重连直通，
 // 两条路径本来就是分开的，天然可分。
 func Reconnect(sock *cosnet.Socket, secret string) (data *session.Data, err error) {
 	if data = sock.Data(); data != nil {
@@ -117,9 +119,22 @@ func Reconnect(sock *cosnet.Socket, secret string) (data *session.Data, err erro
 	if err = s.Verify(secret); err != nil {
 		return
 	}
-	_, err = s.Refresh() //刷线TOKEN
+	if _, err = s.Refresh(); err != nil { //刷线TOKEN
+		return
+	}
 	data = s.Data
+	//Refresh只改内存副本,必须Release写穿存储;否则Redis后端里仍是旧secret,
+	//第二次重连Verify还原出旧值,前缀比对失败,重连永久失效(与Create/rebind同一坑)
+	//注意Release会置空s.Data,必须先取出data
+	s.Release()
 	Replace(data, sock)
+	//会话已选角的要重新入表:存储还原的对象与表里的可能是两个实例(Redis 后端每次
+	//Verify 都新建对象),内存后端下则是同一实例、表项本就在——rebind 幂等。
+	//若断线期间角色已被接管,本会话的 uid 已被 supersede 清空(含存储),这里自然跳过:
+	//重连落地为未选角状态,夺回角色须走重新选角的占用判定,而非秘钥说了算。
+	if uid := data.GetString(gwcfg.ServiceMetadataUID); uid != "" {
+		rebind(data, "", uid)
+	}
 	return
 }
 
@@ -136,10 +151,11 @@ func Disconnect(sock *cosnet.Socket) (err error) {
 	if data == nil {
 		return
 	}
-	os := Socket(data)
 	var offline bool
+	//Socket(data)必须在锁内读:锁外读到旧值时,若Replace(闪断重连)恰好先完成,
+	//陈旧的os.Is(sock)为真会误删新连接的绑定并误报掉线
 	data.Mutex(func(setter session.Setter) {
-		if os != nil && os.Is(sock) {
+		if os := Socket(data); os != nil && os.Is(sock) {
 			setter.Delete(SessionPlayerSocketName)
 			offline = true
 		}

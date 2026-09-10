@@ -9,77 +9,157 @@ import (
 	"github.com/hwcer/gateway/gwcfg"
 )
 
+// players 会话表:**键 = UID(角色ID),只收已选角的会话**。
+//
+// 会话本身自认证起就存在(id=GUID,见 Create),但认证阶段没有角色,不入表——
+// 频道、踢人、推送等业务语义都按 UID 说话,表键即业务键,按角色定位一次直查,
+// 不存在"查错人"的结构性风险(旧实现的 UID->GUID 反向映射与归属校验因此整个不需要)。
+// 同账号多角色并行在线是合法状态:会话按登录建,不按账号复用。
+//
+// 顶号因此是 UID 级而不是账号级:登录不踢任何人,角色占用在选角回包落地时处理
+//(见 rebind);强制还是协商由网关层 negotiate(Setting.ForceReplace)在落地前决定。
 var players = sync.Map{}
 
-// uids UID(角色ID) -> GUID(账号ID) 的全局反向映射。
-// 长链接与会话表绑定的是GUID,而频道等业务语义按UID说话(一个账号可能有多个角色,
-// 分属不同公会;同一时间只有一个角色在线)。按角色定位会话的操作(如踢人)经此映射换算。
-var uids = sync.Map{}
-
-// GUID 按角色ID反查账号ID,角色不在线返回空串
-func GUID(uid string) string {
-	v, ok := uids.Load(uid)
-	if !ok {
-		return ""
+// Create 认证登录:新建会话(id=guid)写入存储并返回 token。**不进会话表**——
+// 表键是 uid,角色要等选角回包落地(Update→rebind)才入表。
+//
+// 会话 id 与账号身份的关系随存储后端不同:Redis 后端保留自定义 id(id=guid);
+// 内存后端的 storage.New 会把它重写成分配的 token。因此**账号身份一律以
+// session.Data.UUID() 为准**(与主干语义一致),不另存进 values——values 里的
+// 键可经 Cookies 白名单被业务回包改写,身份键放那里有被改写的风险。
+func Create(guid string, value values.Values) (token string, data *session.Data, err error) {
+	if value == nil {
+		value = values.Values{}
 	}
-	g, _ := v.(string)
-	return g
+	data = session.NewData(guid, value)
+	ss := session.New(data)
+	if token, err = ss.New(data); err != nil {
+		return
+	}
+	//秘钥写穿存储:库的 New 先落库、之后才生成秘钥,而 Refresh 只改内存+标脏,
+	//不 Release 的话 Redis 后端里秘钥永远不落盘——重连 Verify 还原出的副本没有
+	//秘钥,直接 ErrorSessionIllegal。内存后端同一实例,行为不变
+	ss.Release()
+	return
 }
 
-// Update 更新会话数据并同步 UID->GUID 映射(换角时旧UID自动解绑)
+// Update 更新会话数据;uid 发生变化(首次选角/换角)时同步维护会话表
 func Update(p *session.Data, vs values.Values) {
 	if p == nil || len(vs) == 0 {
 		return
 	}
-	old := p.GetString(gwcfg.ServiceMetadataUID)
-	p.Update(vs)
-	syncUID(p, old)
+	// 换角时旧角色要走一遍**模拟登出**(仅网关层面触发事件):在 uid 翻转之前、
+	// 以旧身份补一发掉线事件——业务侧监听 EventSessionDisconnect,按事件时刻
+	// 会话上的 uid 感知旧角色下线,与真实掉线同一条路。连接与会话都保留给新角色;
+	// 旧角色的表项摘除、频道清理由随后的 rebind 完成(相当于真实登出时 Release
+	// 阶段的清理,只是按旧角色收窄)。被顶号(supersede)不发:角色还在线,只是
+	// 换了持有者。
+	// ⚠️ 事件回调同步走业务逻辑,不能在会话锁内发(重入死锁,同 supersede 约束),
+	// 所以按"先判变→锁外发事件→锁内落值"的顺序。uid 只能经 vs 里的同名键变化
+	//(Update 是平铺合并),锁外的判变是精确的;键不存在不发(常态响应反复携带
+	// 同值 uid 也不发),显式清空(uid 变空,退回未选角)同样算旧角色登出。
+	if v, ok := vs[gwcfg.ServiceMetadataUID]; ok {
+		next, _ := v.(string)
+		if old := p.GetString(gwcfg.ServiceMetadataUID); old != "" && old != next {
+			session.Emit(session.EventSessionDisconnect, p)
+		}
+	}
+	//old/uid 成对读进同一把锁:同会话并发的两次换角不会拿到错位的基线
+	var old, uid string
+	p.Mutex(func(setter session.Setter) {
+		old = setter.GetString(gwcfg.ServiceMetadataUID)
+		setter.Update(vs)
+		uid = setter.GetString(gwcfg.ServiceMetadataUID)
+	})
+	if uid != old {
+		rebind(p, old, uid)
+	}
 }
 
-// syncUID 按会话当前UID刷新映射,oldUID为变更前的UID
-func syncUID(p *session.Data, oldUID string) {
-	if p == nil {
-		return
-	}
-	uid := p.GetString(gwcfg.ServiceMetadataUID)
-	if uid == oldUID {
-		if uid != "" {
-			uids.Store(uid, p.UUID())
-		}
-		return
-	}
-	// 换角:旧UID解绑。频道成员一律按UID绑定,旧角色的频道身份也要一并清理,
-	// 否则换角后旧公会的广播还会推给新角色。
-	// 与 Delete 同一条防护:映射仍指向本会话才删——转服/异常双登后同一UID可能已归属
-	// 别的会话,误删别人的映射会让按UID推送(GetWithUid)静默断链
-	if oldUID != "" {
-		if v, ok := uids.Load(oldUID); ok {
-			if g, _ := v.(string); g == p.UUID() {
-				uids.Delete(oldUID)
+// rebind uid 变化(首次选角/换角)时维护会话表。uid 由调用方在会话锁内读好传入。
+//
+// 表键=uid,一个角色同一时间只允许一个在线会话:新 uid 已被别的会话占着时,
+// 本会话**接管**(supersede 老会话)。这就是 UID 级顶号,触发点是选角回包落地——
+// 网关不解析协议体,选角之前无从知道目标角色,所以登录阶段不可能做占用判断。
+//
+// 强制还是协商不在这里决定:forward 在 uid 落地前先过 negotiate(见 replaced.go,
+// 按 Setting.ForceReplace),被拒根本到不了这里——走到这里的都是已放行的接管。
+// Reconnect 路径不经协商,但它只会幂等地回到自己原有的表项,不构成顶号。
+//
+// 推送/响应的 metadata 反复携带同一 uid 是常态,uid 未变的快路径在 Update 的
+// 锁内就地短路,走不到这里。
+func rebind(p *session.Data, oldUID, uid string) {
+	//先原子换入表项,再处置被挤出的会话:
+	//  - 换入到处置完成之间,按 uid 的推送已经落在新会话上,不会多指向老会话一小段;
+	//  - supersede 里的 sock.Replaced 会同步 Emit 走业务下发,期间表项必须已是新会话;
+	//  - 并发抢同一 uid 的两次接管由 Swap 天然仲裁:后入者赢,先入者作为被挤出方处置,
+	//    不会出现"两个会话都自认为持有角色"的窗口。
+	var displaced *session.Data
+	if uid != "" {
+		if prev, loaded := players.Swap(uid, p); loaded {
+			//同会话的不同实例不算被挤出(Redis 后端每次 Verify 都从存储新建副本,
+			//重连即此形态):这是同一个客户端自己回来,老副本等着废弃即可,
+			//不许 Replaced 自己、也不许清自己的 uid 与频道身份
+			if os, _ := prev.(*session.Data); os != nil && !os.Is(p) {
+				displaced = os
 			}
 		}
+	}
+	//uid 变更**无条件**写穿存储(含清空):HTTP+Redis 下会话每个请求都从存储
+	//新建副本,uid 不落盘的话下一个请求就回到旧值——换角到空若不写穿,还原出的
+	//副本仍持旧 uid 而表项已摘,按 uid 推送静默丢失。存空串与删除等价;
+	//内存后端的 Storage.Update 是 no-op
+	ss := session.New(p)
+	ss.Update(values.Values{gwcfg.ServiceMetadataUID: uid})
+	ss.Release()
+	if oldUID != "" {
+		//归属校验的原子版:只有表项仍指向本会话才摘,不能误摘别人的表项
+		players.CompareAndDelete(oldUID, p)
+		//旧角色的频道身份一并清理,否则换角后旧频道的广播还会推给新角色
 		channel.SwitchUID(p, oldUID)
 	}
-	if uid != "" {
-		uids.Store(uid, p.UUID())
+	if displaced != nil {
+		supersede(displaced, uid, p)
 	}
 }
 
-func Get(uuid string) *session.Data {
-	v, ok := players.Load(uuid)
+// supersede 新会话接管 uid 时对老会话的处置:
+//
+// ① 连接进"只收不发"存活期(在途回包照常送达、新请求被拒、到期断开),
+//    ip 是新端的地址,供老端提示"角色在 xxx 上线";
+// ② 清掉 uid 与频道身份——它随后的 Disconnect/Release 不再以这个角色行动:
+//    掉线通知因 uid 为空自然跳过,也不会误删新会话刚接手的频道成员。
+//
+// 老会话的表项不用显式摘:rebind 的 Swap 已经把它换成了新会话。
+// uid 清除必须**写穿存储**(Session 层脏键机制,存空串与删除等价):Redis 后端
+// 每次 Verify 都从存储新建副本,只改内存的话被接管会话的存储里 uid 仍在,
+// 它持 secret 重连会还原出带 uid 的副本并经 rebind 重新夺回角色,与内存后端
+// 相悖(内存后端单实例,改内存即改存储)。内存后端的 Storage.Update 是 no-op,
+// 行语义不变。
+// ⚠️ 本函数运行时**不持有任何会话锁**(sock.Replaced 会同步 Emit 走业务下发逻辑,
+// 塞进 p.Mutex 里迟早撞上重入死锁,与旧 negotiate 的约束一致)。
+func supersede(old *session.Data, uid string, neo *session.Data) {
+	if sock := Socket(old); sock != nil {
+		ip := ""
+		if ns := Socket(neo); ns != nil && ns.RemoteAddr() != nil {
+			ip = stripPort(ns.RemoteAddr().String())
+		}
+		sock.Replaced(ip)
+	}
+	ss := session.New(old)
+	ss.Update(values.Values{gwcfg.ServiceMetadataUID: ""})
+	ss.Release()
+	channel.SwitchUID(old, uid)
+}
+
+// Get 按角色ID取在线会话,不在线返回 nil
+func Get(uid string) *session.Data {
+	v, ok := players.Load(uid)
 	if !ok {
 		return nil
 	}
 	p, _ := v.(*session.Data)
 	return p
-}
-
-func GetWithUid(uid string) *session.Data {
-	uuid := GUID(uid)
-	if uuid == "" {
-		return nil
-	}
-	return Get(uuid)
 }
 
 func Range(fn func(*session.Data) bool) {
@@ -91,43 +171,19 @@ func Range(fn func(*session.Data) bool) {
 	})
 }
 
+// Delete 下线清理:摘掉本会话的表项并关闭其连接
 func Delete(p *session.Data) bool {
 	if p == nil {
 		return false
 	}
-	// 只有映射仍指向本会话才解绑:换角/转服后同一UID可能已归属别的账号,不能误删
+	//只有表项仍指向本会话才摘(原子归属校验):换角/被接管后同一uid可能已归属
+	//别的会话,不能误摘
 	if uid := p.GetString(gwcfg.ServiceMetadataUID); uid != "" {
-		if v, ok := uids.Load(uid); ok {
-			if g, _ := v.(string); g == p.UUID() {
-				uids.Delete(uid)
-			}
-		}
+		players.CompareAndDelete(uid, p)
 	}
-	players.Delete(p.UUID())
 	sock := Socket(p)
 	if sock != nil {
 		sock.Close()
 	}
 	return true
-}
-
-func Login(guid string, value values.Values) (token string, data *session.Data, err error) {
-	data = session.NewData(guid, value)
-	i, loaded := players.LoadOrStore(guid, data)
-	if loaded {
-		p, _ := i.(*session.Data)
-		old := p.GetString(gwcfg.ServiceMetadataUID)
-		p.Update(value)
-		syncUID(p, old) //复用会话重新登录可能换了角色,旧UID要解绑
-		data = p
-	} else {
-		syncUID(data, "")
-	}
-	ss := session.New(data)
-	if !loaded {
-		token, err = ss.New(data)
-	} else {
-		token, err = ss.Refresh() //刷新TOKEN 强制其他TOKEN失效
-	}
-	return
 }

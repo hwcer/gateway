@@ -11,16 +11,17 @@ import (
 	"github.com/hwcer/gateway/players"
 )
 
+// newKickTestPlayer 模拟真实登录+选角:Create 建认证会话(不进表),Update 落 uid 触发 rebind 入表
 func newKickTestPlayer(t *testing.T, guid, uid string) *session.Data {
 	t.Helper()
 	if session.Options.Storage == nil {
 		session.Options.Storage = session.NewMemory(16)
 	}
-	// 模拟真实登录:Login 会写 players 表并维护 UID->GUID 映射
-	_, p, err := players.Login(guid, values.Values{gwcfg.ServiceMetadataUID: uid})
+	_, p, err := players.Create(guid, nil)
 	if err != nil {
-		t.Fatalf("login error:%v", err)
+		t.Fatalf("create error:%v", err)
 	}
+	players.Update(p, values.Values{gwcfg.ServiceMetadataUID: uid})
 	return p
 }
 
@@ -83,70 +84,42 @@ func TestChannelKick(t *testing.T) {
 	}
 }
 
-// UID->GUID 映射生命周期:换角解绑旧UID,下线解绑,UID转移后不误删新账号的映射
-func TestPlayersUIDMapping(t *testing.T) {
+// players 表生命周期(键=uid):选角入表、换角换绑、跨会话接管(uid级顶号)、下线摘除
+func TestPlayersTableLifecycle(t *testing.T) {
 	p := newKickTestPlayer(t, "guid-a", "2001")
-	defer players.Delete(p)
-
-	if g := players.GUID("2001"); g != "guid-a" {
-		t.Fatalf("映射未建立, GUID(2001)=%s", g)
+	if players.Get("2001") != p {
+		t.Fatalf("选角后未入表")
 	}
 
-	// 换角:同账号重新登录切换角色,旧UID必须解绑,否则踢旧角色会误伤新会话
-	if _, p2, err := players.Login("guid-a", values.Values{gwcfg.ServiceMetadataUID: "2002"}); err != nil {
-		t.Fatalf("relogin error:%v", err)
-	} else if p2 != p {
-		t.Fatalf("同GUID重登应复用会话")
+	// 换角:同一会话切换角色,旧键摘除、新键建立
+	players.Update(p, values.Values{gwcfg.ServiceMetadataUID: "2002"})
+	if players.Get("2001") != nil {
+		t.Fatalf("换角后旧键未摘")
 	}
-	if g := players.GUID("2001"); g != "" {
-		t.Fatalf("换角后旧UID未解绑, GUID(2001)=%s", g)
-	}
-	if g := players.GUID("2002"); g != "guid-a" {
-		t.Fatalf("换角后新UID未绑定, GUID(2002)=%s", g)
+	if players.Get("2002") != p {
+		t.Fatalf("换角后新键未建")
 	}
 
-	// UID转移到别的账号:原会话下线不能删掉新账号的映射
-	_ = newKickTestPlayer(t, "guid-b", "2002")
-	pb := players.Get("guid-b")
-	defer players.Delete(pb)
+	// 跨会话接管:另一会话选同一角色,老会话被 supersede(uid 清空让位)
+	pb := newKickTestPlayer(t, "guid-b", "2002")
+	if players.Get("2002") != pb {
+		t.Fatalf("接管未生效")
+	}
+	if p.GetString(gwcfg.ServiceMetadataUID) != "" {
+		t.Fatalf("被接管的老会话 uid 未清空")
+	}
+
+	// 被接管的老会话下线:归属校验挡住,不得误摘新会话的表项
 	players.Delete(p)
-	if g := players.GUID("2002"); g != "guid-b" {
-		t.Fatalf("UID转移后映射被误删, GUID(2002)=%s", g)
+	if players.Get("2002") != pb {
+		t.Fatalf("老会话下线误摘了新会话的表项")
 	}
 
-	// 下线解绑
+	// 正常下线摘除
 	players.Delete(pb)
-	if g := players.GUID("2002"); g != "" {
-		t.Fatalf("下线后映射未解绑, GUID(2002)=%s", g)
+	if players.Get("2002") != nil {
+		t.Fatalf("下线后表项未摘")
 	}
-}
-
-// 换角解绑旧UID必须带归属校验:同一UID已被别的会话抢占时,换角不得误删别人的映射
-// (与 players.Delete 的防护同一条规则,那条守的是下线,这条守的是换角)
-func TestPlayersUIDSwitchGuard(t *testing.T) {
-	pa := newKickTestPlayer(t, "guard-a", "2101")
-	pb := newKickTestPlayer(t, "guard-b", "2101") //B抢占2101
-
-	if g := players.GUID("2101"); g != "guard-b" {
-		t.Fatalf("B抢占后 GUID(2101)=%s, want guard-b", g)
-	}
-	//A换角到2102:不得把已归属B的2101映射删掉
-	if _, p2, err := players.Login("guard-a", values.Values{gwcfg.ServiceMetadataUID: "2102"}); err != nil {
-		t.Fatalf("relogin error:%v", err)
-	} else if p2 != pa {
-		t.Fatalf("同GUID重登应复用会话")
-	}
-	if g := players.GUID("2101"); g != "guard-b" {
-		t.Fatalf("A换角误删了B的映射, GUID(2101)=%s", g)
-	}
-	if g := players.GUID("2102"); g != "guard-a" {
-		t.Fatalf("A新UID未绑定, GUID(2102)=%s", g)
-	}
-
-	defer func() {
-		players.Delete(pa)
-		players.Delete(pb)
-	}()
 }
 
 // 频道命令统一编码:key = 前缀 + ["name","value"],value 仅 Kick 携带被踢UID。
@@ -180,7 +153,7 @@ func TestCookiesUpdateChannelCommands(t *testing.T) {
 	}
 }
 
-// 频道一律按UID绑定:换角(会话uid变更)时,旧角色的频道身份必须整体清理,
+// 频道一律按UID绑定:换角(uid变更)时,旧角色的频道身份必须整体清理,
 // 否则换角后旧公会的广播还会推给新角色
 func TestChannelSwitchUID(t *testing.T) {
 	name, value := "switchtest", "room1"
@@ -192,12 +165,8 @@ func TestChannelSwitchUID(t *testing.T) {
 		t.Fatalf("join后成员数=%d, want 1", n)
 	}
 
-	// 换角重登:同一账号切换到另一个角色
-	if _, p2, err := players.Login("guid-switch", values.Values{gwcfg.ServiceMetadataUID: "4002"}); err != nil {
-		t.Fatalf("relogin error:%v", err)
-	} else if p2 != p {
-		t.Fatalf("同GUID重登应复用会话")
-	}
+	// 换角:同一会话切换到另一个角色
+	players.Update(p, values.Values{gwcfg.ServiceMetadataUID: "4002"})
 
 	if n := channelMemberCount(name, value); n != 0 {
 		t.Fatalf("换角后旧角色仍在频道,成员数=%d", n)
@@ -205,11 +174,33 @@ func TestChannelSwitchUID(t *testing.T) {
 	if _, ok := channel.NewSetter(p).Get(name); ok {
 		t.Fatalf("换角后会话频道记录未清理")
 	}
+	if players.Get("4001") != nil {
+		t.Fatalf("换角后旧 uid 表项未摘")
+	}
 
-	// 新角色重新入房,以新UID为成员键
+	// 新角色重新入房,以新uid为成员键
 	channel.Join(p, name, value)
 	if n := channelMemberCount(name, value); n != 1 {
 		t.Fatalf("新角色入房后成员数=%d, want 1", n)
 	}
 	channel.Delete(name, value)
+}
+
+// 同账号多角色并行在线:两条独立会话互不干扰——
+// 登录不踢人(顶号已是UID级),这是本次改造的核心产品语义
+func TestSameAccountMultiRole(t *testing.T) {
+	pa := newKickTestPlayer(t, "guid-multi", "7001")
+	pb := newKickTestPlayer(t, "guid-multi", "7002")
+	defer func() {
+		players.Delete(pa)
+		players.Delete(pb)
+	}()
+
+	if players.Get("7001") != pa || players.Get("7002") != pb {
+		t.Fatalf("同账号两角色应各自在表")
+	}
+	players.Delete(pa)
+	if players.Get("7002") != pb {
+		t.Fatalf("一个角色下线不应影响另一个")
+	}
 }

@@ -20,6 +20,8 @@ func init() {
 
 const (
 	WS_Auth_Sec_WebSocket_Protocol = "auth"
+	// wssTokenMeta WSVerify→WSAccept 之间传递原始 token 的内部键(不出网关、不进业务 metadata)
+	wssTokenMeta = "_wss_token"
 )
 
 func WSVerify(_ http.ResponseWriter, r *http.Request) (meta map[string]string, err error) {
@@ -48,24 +50,33 @@ func WSVerify(_ http.ResponseWriter, r *http.Request) (meta map[string]string, e
 	if err = ss.Verify(token); err != nil {
 		return nil, err
 	}
-	return map[string]string{gwcfg.ServiceMetadataGUID: ss.Data.UUID()}, nil
+	//会话 id 即账号身份(Redis 后端 id=guid;内存后端为 storage 分配的 token,
+	//见 players.Create),与主干语义一致,不依赖 values
+	return map[string]string{gwcfg.ServiceMetadataGUID: ss.Data.UUID(), wssTokenMeta: token}, nil
 }
+
+// WSAccept token 重连要**还原原会话**而不是新建:带 token 重连的客户端是断线后
+// 自己回来的,凭 token 就能找回会话(含已选的 uid);新建会把原会话丢在表里、
+// 把客户端踢回选角界面——旧实现按 guid 复用会话,这条语义必须保住。
+// 还原走 players.Reconnect(Verify+Refresh+Replace+rebind),与新 secret 的下发
+// (S2CSecret)同 TCP 重连一套契约。
 func WSAccept(sock *cosnet.Socket, meta map[string]string) {
 	if len(meta) == 0 {
 		return
 	}
-	uuid, ok := meta[gwcfg.ServiceMetadataGUID]
+	guid, ok := meta[gwcfg.ServiceMetadataGUID]
 	if !ok {
 		return
 	}
-	value := gwcfg.Cookies.Filter(meta)
-	//顶号处置必须在 players.Connect(内含 Login)之前，理由见 negotiate
-	if err := negotiate(uuid, sock.RemoteAddr().String(), sock); err != nil {
-		logger.Alert("wss session replaced:%v", err)
-		sock.Close(0) //协商模式下新端不能上线，这条连接没有存在意义
-		return
+	if token := meta[wssTokenMeta]; token != "" {
+		if _, err := players.Reconnect(sock, token); err == nil {
+			return
+		}
+		//token 二次校验失败(理论上到不了,WSVerify 已拒过):退回新建保连接可用
 	}
-	if _, err := players.Connect(sock, uuid, value); err != nil {
+	value := gwcfg.Cookies.Filter(meta)
+	//顶号是 UID 级的,发生在选角回包落地时(见 players.rebind)——登录不做占用判断
+	if _, err := players.Connect(sock, guid, value); err != nil {
 		logger.Alert("wss session create fail:%v", err)
 	}
 

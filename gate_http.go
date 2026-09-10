@@ -200,20 +200,15 @@ type HttpRequest struct {
 	path     string
 }
 
-// login 登录（gateway 内部）
+// login 登录（gateway 内部）:认证即建会话(id=guid,见 players.Create),不含角色——
+// uid 由选角回包经 CookiesUpdate→rebind 落表,UID 级顶号协商也在那时(见 forward)。
+// 也不再收掉会话上的老长连接:会话按登录建、不按账号复用,顶号是 UID 级的,
+// 占用在选角落地时处理,登录阶段不动任何人。
 func (this *HttpRequest) login(guid string, value values.Values) (token string, err error) {
-	// 顶号处置：三条登录路径 TCP/WSS/HTTP 行为一致，且必须在 Login 之前，理由见 negotiate
-	if err = negotiate(guid, this.Context.RemoteAddr(), nil); err != nil {
-		return
-	}
 	var data *session.Data
-	token, data, err = players.Login(guid, value)
-	if err != nil {
+	if token, data, err = players.Create(guid, value); err != nil {
 		return
 	}
-	// 短连接自己不持有 socket，这里只是把会话上的老长连接（若还在）收掉
-	players.Replace(data, nil)
-
 	// 设置cookie
 	cookie := &http.Cookie{Name: session.Options.Name, Path: "/", Value: token}
 	http.SetCookie(this.Context.Response, cookie)

@@ -208,22 +208,21 @@ func (this *SocketRequest) verify() (*session.Data, error) {
 	return data, nil
 }
 
-// login 登录（gateway 内部）
+// login 登录（gateway 内部）:认证即建会话(id=guid,见 players.Create)并绑定连接。
+// 会话此时没有角色——uid 要等选角回包经 CookiesUpdate→rebind 落表,UID 级顶号
+// 协商也在那时(见 forward),登录阶段不做占用判断:同账号多角色并行是合法状态。
 func (this *SocketRequest) login(guid string, value values.Values) (token string, err error) {
 	sock := this.Context.Socket
 	data := sock.Data()
 	if data != nil {
+		//同连接重复认证:同账号幂等返回现有会话,换账号报错。
+		//会话 id 即账号身份(Redis 后端 id=guid;内存后端为 storage 分配的
+		//token,重认证一律报错——与主干语义一致)
 		if data.UUID() != guid {
 			return "", fmt.Errorf("please do not login again")
 		}
-	} else {
-		//顶号处置必须在 players.Connect(内含 Login)之前，理由见 negotiate
-		if err = negotiate(guid, sock.RemoteAddr().String(), sock); err != nil {
-			return
-		}
-		if data, err = players.Connect(sock, guid, value); err != nil {
-			return
-		}
+	} else if data, err = players.Connect(sock, guid, value); err != nil {
+		return
 	}
 	ss := session.New(data)
 	return ss.Token()
