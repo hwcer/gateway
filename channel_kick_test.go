@@ -204,3 +204,39 @@ func TestSameAccountMultiRole(t *testing.T) {
 		t.Fatalf("一个角色下线不应影响另一个")
 	}
 }
+
+// TestCookiesUpdateJoinAfterUidLanding 频道命令必须在 uid 落地**之后**执行:
+// 同包携带"选角/换角 + Join"时要以**新身份**入房。旧顺序(循环就地 Join、
+// Update 收尾)下,换角的 Join 以旧uid入房随即被 SwitchUID 清掉,
+// 首选角的 Join 更因 uid 为空被直接拒绝——两种情形命令都静默丢失。
+func TestCookiesUpdateJoinAfterUidLanding(t *testing.T) {
+	if session.Options.Storage == nil {
+		session.Options.Storage = session.NewMemory(16)
+	}
+	p := newKickTestPlayer(t, "guid-cu", "3001")
+	defer players.Delete(p)
+	defer channel.Delete("cu", "r1")
+
+	//换角 + Join 同包
+	CookiesUpdate(values.Metadata{
+		gwcfg.ServiceMetadataUID:                             "3002",
+		gwcfg.ServicePlayerChannelJoin + context.ChannelNameEncode("cu", "r1"): "",
+	}, p, 0)
+
+	if p.GetString(gwcfg.ServiceMetadataUID) != "3002" {
+		t.Fatal("uid 应已落地")
+	}
+	if players.Get("3002") != p {
+		t.Fatal("应已按新角色入表")
+	}
+	if n := channelMemberCount("cu", "r1"); n != 1 {
+		t.Fatalf("Join 必须以新身份入房,成员数=%d", n)
+	}
+	//入房身份必须真是新uid:以新身份 Leave 应能正常退出
+	CookiesUpdate(values.Metadata{
+		gwcfg.ServicePlayerChannelLeave + context.ChannelNameEncode("cu", "r1"): "",
+	}, p, 0)
+	if n := channelMemberCount("cu", "r1"); n != 0 {
+		t.Fatalf("以新身份 Leave 失败,成员数=%d", n)
+	}
+}

@@ -20,7 +20,6 @@ var Service = server.Service(gwcfg.ServiceTypeGate)
 
 func init() {
 	Register(send)
-	Register(write)
 	Register(broadcast)
 }
 
@@ -29,12 +28,6 @@ func Register(i any, prefix ...string) {
 	if err := Service.Register(i, prefix...); err != nil {
 		logger.Fatal("%v", err)
 	}
-}
-
-// Deprecated: 用 send。定位规则已经统一——socketId 与会话二选一，socketId 优先，
-// write 只是"只有 socketId"的那个特例，没有必要单独存在。保留只为兼容既有调用方。
-func write(c *cosrpc.Context) any {
-	return send(c)
 }
 
 // send 消息推送。
