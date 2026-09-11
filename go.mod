@@ -3,7 +3,7 @@ module github.com/hwcer/gateway
 go 1.26.0
 
 require (
-	github.com/hwcer/cosgo v1.8.4-0.20260904100637-05162b06213a
+	github.com/hwcer/cosgo v1.8.4-0.20260911035547-d74d8816d82a
 	github.com/hwcer/cosnet v1.4.5-0.20260827022805-535de6de921f
 	github.com/hwcer/cosrpc v1.4.3-0.20260829022637-3056019a1349
 	github.com/hwcer/cosweb v1.4.3-0.20260814024851-f480f70bdd1a
@@ -83,7 +83,6 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect

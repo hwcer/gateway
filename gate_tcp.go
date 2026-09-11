@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 
@@ -287,11 +288,8 @@ func (this *SocketRequest) Header() map[string]string {
 	b := magic.Binder.Name()
 	r[binder.HeaderAccept] = b
 	r[binder.HeaderContentType] = b
-	if this.header == nil {
-		return r
-	}
-	for k, v := range this.header {
-		r[k] = v
+	if this.header != nil {
+		maps.Copy(r, this.header)
 	}
 	return r
 }

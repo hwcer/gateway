@@ -17,7 +17,7 @@ import (
 // 同账号多角色并行在线是合法状态:会话按登录建,不按账号复用。
 //
 // 顶号因此是 UID 级而不是账号级:登录不踢任何人,角色占用在选角回包落地时处理
-//(见 rebind);强制还是协商由网关层 negotiate(Setting.ForceReplace)在落地前决定。
+// (见 rebind);强制还是协商由网关层 negotiate(Setting.ForceReplace)在落地前决定。
 var players = sync.Map{}
 
 // Create 认证登录:新建会话(id=guid)写入存储并返回 token。**不进会话表**——
@@ -31,15 +31,15 @@ func Create(guid string, value values.Values) (token string, data *session.Data,
 	if value == nil {
 		value = values.Values{}
 	}
-	data = session.NewData(guid, value)
-	ss := session.New(data)
+	ss := session.NewWithValues(guid, value)
+	data = ss.Data
 	if token, err = ss.New(data); err != nil {
 		return
 	}
 	//秘钥写穿存储:库的 New 先落库、之后才生成秘钥,而 Refresh 只改内存+标脏,
-	//不 Release 的话 Redis 后端里秘钥永远不落盘——重连 Verify 还原出的副本没有
+	//不 Submit 的话 Redis 后端里秘钥永远不落盘——重连 Verify 还原出的副本没有
 	//秘钥,直接 ErrorSessionIllegal。内存后端同一实例,行为不变
-	ss.Release()
+	err = ss.Submit()
 	return
 }
 
@@ -111,7 +111,7 @@ func rebind(p *session.Data, oldUID, uid string) {
 	//内存后端的 Storage.Update 是 no-op
 	ss := session.New(p)
 	ss.Update(values.Values{gwcfg.ServiceMetadataUID: uid})
-	ss.Release()
+	ss.Submit()
 	if oldUID != "" {
 		//归属校验的原子版:只有表项仍指向本会话才摘,不能误摘别人的表项
 		players.CompareAndDelete(oldUID, p)
@@ -126,9 +126,12 @@ func rebind(p *session.Data, oldUID, uid string) {
 // supersede 新会话接管 uid 时对老会话的处置:
 //
 // ① 连接进"只收不发"存活期(在途回包照常送达、新请求被拒、到期断开),
-//    ip 是新端的地址,供老端提示"角色在 xxx 上线";
+//
+//	ip 是新端的地址,供老端提示"角色在 xxx 上线";
+//
 // ② 清掉 uid 与频道身份——它随后的 Disconnect/Release 不再以这个角色行动:
-//    掉线通知因 uid 为空自然跳过,也不会误删新会话刚接手的频道成员。
+//
+//	掉线通知因 uid 为空自然跳过,也不会误删新会话刚接手的频道成员。
 //
 // 老会话的表项不用显式摘:rebind 的 Swap 已经把它换成了新会话。
 // uid 清除必须**写穿存储**(Session 层脏键机制,存空串与删除等价):Redis 后端
@@ -148,7 +151,7 @@ func supersede(old *session.Data, uid string, neo *session.Data) {
 	}
 	ss := session.New(old)
 	ss.Update(values.Values{gwcfg.ServiceMetadataUID: ""})
-	ss.Release()
+	ss.Submit()
 	channel.SwitchUID(old, uid)
 }
 

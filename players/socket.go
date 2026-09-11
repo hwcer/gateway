@@ -123,10 +123,9 @@ func Reconnect(sock *cosnet.Socket, secret string) (data *session.Data, err erro
 		return
 	}
 	data = s.Data
-	//Refresh只改内存副本,必须Release写穿存储;否则Redis后端里仍是旧secret,
+	//Refresh只改内存副本,必须Submit写穿存储;否则Redis后端里仍是旧secret,
 	//第二次重连Verify还原出旧值,前缀比对失败,重连永久失效(与Create/rebind同一坑)
-	//注意Release会置空s.Data,必须先取出data
-	s.Release()
+	s.Submit()
 	Replace(data, sock)
 	//会话已选角的要重新入表:存储还原的对象与表里的可能是两个实例(Redis 后端每次
 	//Verify 都新建对象),内存后端下则是同一实例、表项本就在——rebind 幂等。
