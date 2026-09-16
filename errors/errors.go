@@ -21,9 +21,10 @@ var (
 //
 // 复用 session 的 209，客户端不必为顶号单独认一个码。
 //
-// ⚠️ 这里**不能**写成 values.Errorf(0, session.ErrorSessionReplaced).WithArgs(...)：
-// 无需改写字段时 Errorf 原样返回传入的指针，而那是个包级共享哨兵，WithArgs 会把 Args
-// 写进全局，之后所有拿到 ErrorSessionReplaced 的地方都带着上一次顶号的 IP。
+// ⚠️ 这里**不能**绕过 Clone 原地改 Args（比如先 Errorf 再直接写返回值的 Args 字段）：
+// 无需改写字段时 Errorf 原样返回传入的指针，而那是个包级共享哨兵，原地写 Args 会污染全局，
+// 之后所有拿到 ErrorSessionReplaced 的地方都带着上一次顶号的 IP。
+// Clone 先拷贝再换 Args，不碰哨兵本体——换 Args 的唯一合法姿势。
 func ErrReplaced(countdown int32, address string) *values.Message {
-	return values.Errorf(session.ErrorSessionReplaced.Code, "session replaced").WithArgs(countdown, address)
+	return values.Errorf(session.ErrorSessionReplaced.Code, "session replaced").Clone(countdown, address)
 }

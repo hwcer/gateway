@@ -142,6 +142,8 @@ github.com/hashicorp/serf v0.9.5/go.mod h1:UWDWwZeL5cuWDJdl0C6wrvrUwEqtQ4ZKBKKEN
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/hwcer/cosgo v1.8.4-0.20260912010310-8e8fd00d86e3 h1:8vPP2Wo1BMjtgO3qkjISzTTNoQ5S0GzAmIrFPnZ/S1M=
 github.com/hwcer/cosgo v1.8.4-0.20260912010310-8e8fd00d86e3/go.mod h1:RtiJ04/yrHSzqSLD+o/pLJYcrQGr+ywSlwhdDTUU1GE=
+github.com/hwcer/cosgo v1.8.4-0.20260916081809-8c47254c3227 h1:im2L2GcTWzWYGHwxrzcBOyAOFaZFWJd4Wp2XJ0wa8TM=
+github.com/hwcer/cosgo v1.8.4-0.20260916081809-8c47254c3227/go.mod h1:RtiJ04/yrHSzqSLD+o/pLJYcrQGr+ywSlwhdDTUU1GE=
 github.com/hwcer/cosnet v1.4.5-0.20260912010638-accbbe7c0c42 h1:1DFq9MS6g1UUXnh26RVzufUTNTyjUsjYWzyZgnpOS6U=
 github.com/hwcer/cosnet v1.4.5-0.20260912010638-accbbe7c0c42/go.mod h1:+Ch3aAy/+vnJMbPiymV8JOnzYIpcH69e1OjO2e5k9Es=
 github.com/hwcer/cosrpc v1.4.3-0.20260912010641-a3f2ce8f6bc5 h1:C43FYxwAxP1k6pI9AIbWYjBbTpCP4wxkwjeizUCplYQ=
