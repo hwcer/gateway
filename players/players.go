@@ -1,13 +1,24 @@
 package players
 
 import (
+	"maps"
+	"math/rand"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/logger"
 )
+
+// instanceKey 会话实例标识:每次登录生成、随会话持久化。
+// 🔴 Redis 后端所有同 guid 会话的 Data.id 相同(reid=guid),顶号仲裁无法区分
+// "同一客户端重连"与"另一台设备登录"——supersede 整个被跳过,双设备短窗内
+// 共享同一角色。重连 Verify 还原的副本携带同一标识,幂等回表不受影响
+const instanceKey = "_inst"
 
 // players 会话表:**键 = UID(角色ID),只收已选角的会话**。
 //
@@ -28,10 +39,13 @@ var players = sync.Map{}
 // session.Data.UUID() 为准**(与主干语义一致),不另存进 values——values 里的
 // 键可经 Cookies 白名单被业务回包改写,身份键放那里有被改写的风险。
 func Create(guid string, value values.Values) (token string, data *session.Data, err error) {
-	if value == nil {
-		value = values.Values{}
-	}
-	ss := session.NewWithValues(guid, value)
+	//🔴 克隆后再写实例标识:value 会被 session.NewData 按引用持有为会话 values,
+	//不能原地改调用方的 map;实例标识每次登录重新生成,随会话落库——重连副本
+	//据此识别"同一个客户端自己回来了"
+	vs := make(values.Values, len(value)+1)
+	maps.Copy(vs, value)
+	vs[instanceKey] = strconv.FormatInt(time.Now().UnixNano(), 36) + strconv.FormatInt(rand.Int63(), 36)
+	ss := session.NewWithValues(guid, vs)
 	data = ss.Data
 	if token, err = ss.New(data); err != nil {
 		return
@@ -47,7 +61,8 @@ func Create(guid string, value values.Values) (token string, data *session.Data,
 func Update(p *session.Data, vs values.Values) {
 	if p == nil || len(vs) == 0 {
 		return
-	}	// 换角时旧角色要走一遍**模拟登出**(仅网关层面触发事件):在 uid 翻转之前、
+	}
+	// 换角时旧角色要走一遍**模拟登出**(仅网关层面触发事件):在 uid 翻转之前、
 	// 以旧身份补一发掉线事件——业务侧监听 EventSessionDisconnect,按事件时刻
 	// 会话上的 uid 感知旧角色下线,与真实掉线同一条路。连接与会话都保留给新角色;
 	// 旧角色的表项摘除、频道清理由随后的 rebind 完成(相当于真实登出时 Release
@@ -73,6 +88,7 @@ func Update(p *session.Data, vs values.Values) {
 	if uid != old {
 		rebind(p, old, uid)
 	}
+	writeThrough(p, vs)
 }
 
 // UpdateExpect 推送路径的会话数据更新：expectUID 为调用方定位会话时依据的 uid 基线。
@@ -94,6 +110,31 @@ func UpdateExpect(p *session.Data, vs values.Values, expectUID string) {
 		}
 		setter.Update(vs)
 	})
+	writeThrough(p, vs)
+}
+
+// writeThrough cookies 全量写穿存储(幂等,失败仅告警)。
+//
+// 🔴 uid 由 rebind 单独写穿,这里跳过防重复 HMSET;其余键(_rid/sid/selector 等)
+// 旧实现只落内存副本——Redis 后端断线重连 Verify 从存储新建副本时全部丢失:
+// 重连对账的 handledIndex 取 _rid,缺失则永远回 0,客户端把断线瞬间所有在飞包
+// 当未处理重发(业务重复执行);selector 丢失则转发投错区服。
+func writeThrough(p *session.Data, vs values.Values) {
+	filtered := make(values.Values, len(vs))
+	for k, v := range vs {
+		if k == gwcfg.ServiceMetadataUID {
+			continue
+		}
+		filtered[k] = v
+	}
+	if len(filtered) == 0 {
+		return
+	}
+	ss := session.New(p)
+	ss.Update(filtered)
+	if err := ss.Submit(); err != nil {
+		logger.Alert("players write through error:%v", err)
+	}
 }
 
 // rebind uid 变化(首次选角/换角)时维护会话表。uid 由调用方在会话锁内读好传入。
@@ -119,8 +160,10 @@ func rebind(p *session.Data, oldUID, uid string) {
 		if prev, loaded := players.Swap(uid, p); loaded {
 			//同会话的不同实例不算被挤出(Redis 后端每次 Verify 都从存储新建副本,
 			//重连即此形态):这是同一个客户端自己回来,老副本等着废弃即可,
-			//不许 Replaced 自己、也不许清自己的 uid 与频道身份
-			if os, _ := prev.(*session.Data); os != nil && !os.Is(p) {
+			//不许 Replaced 自己、也不许清自己的 uid 与频道身份。
+			//判等依据是实例标识而非 Data.id:Redis 后端 id=guid,同 guid 会话的
+			//id 恒等,旧判等恒真,supersede 被跳过,双设备短窗共享同一角色
+			if os, _ := prev.(*session.Data); os != nil && !sameInstance(os, p) {
 				displaced = os
 			}
 		}
@@ -141,6 +184,13 @@ func rebind(p *session.Data, oldUID, uid string) {
 	if displaced != nil {
 		supersede(displaced, uid, p)
 	}
+}
+
+// sameInstance 判断两个会话是否为同一客户端实例:比对实例标识而非 Data.id
+// (Redis 后端同 guid 会话 id 恒等)。标识缺失(升级前的旧会话)按不同实例处理
+func sameInstance(a, b *session.Data) bool {
+	ia := a.GetString(instanceKey)
+	return ia != "" && ia == b.GetString(instanceKey)
 }
 
 // supersede 新会话接管 uid 时对老会话的处置:
