@@ -337,6 +337,9 @@ func (this *HttpRequest) Metadata() values.Metadata {
 		this.metadata = make(values.Metadata)
 		q := this.Context.Request.URL.Query()
 		for k := range q {
+			if gwcfg.MetadataReserved(k) {
+				continue //受信保留键不得由客户端 query 注入
+			}
 			this.metadata[k] = q.Get(k)
 		}
 	}

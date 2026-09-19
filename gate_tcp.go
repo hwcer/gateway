@@ -302,6 +302,9 @@ func (this *SocketRequest) Metadata() values.Metadata {
 		if _, q, _ := this.Context.Path(); q != "" {
 			query, _ := url.ParseQuery(q)
 			for k := range query {
+				if gwcfg.MetadataReserved(k) {
+					continue //受信保留键不得由客户端 query 注入
+				}
 				this.metadata[k] = query.Get(k)
 			}
 		}

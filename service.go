@@ -6,6 +6,7 @@ import (
 
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet/message"
+	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -54,6 +55,9 @@ func send(c *cosrpc.Context) any {
 	}
 	if p != nil {
 		if _, ok := mate[gwcfg.ServicePlayerLogout]; ok {
+			//业务标记的登出推送:与 HTTP logout 同强度语义——频道身份一并释放,
+			//只靠 players.Delete 会把频道成员滞留到 sweeper 兜底
+			channel.Release(p)
 			players.Delete(p)
 			return nil
 		}
