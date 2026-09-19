@@ -133,18 +133,18 @@ func TestCookiesUpdateChannelCommands(t *testing.T) {
 	leaveKey := gwcfg.ServicePlayerChannelLeave + context.ChannelNameEncode(name, value)
 	kickKey := gwcfg.ServicePlayerChannelKick + context.ChannelNameEncode(name, value)
 
-	CookiesUpdate(values.Metadata{joinKey: ""}, p, 0)
+	CookiesUpdate(values.Metadata{joinKey: ""}, p, 0, "")
 	if n := channelMemberCount(name, value); n != 1 {
 		t.Fatalf("join后成员数=%d, want 1", n)
 	}
 
-	CookiesUpdate(values.Metadata{kickKey: "6001"}, p, 0)
+	CookiesUpdate(values.Metadata{kickKey: "6001"}, p, 0, "")
 	if n := channelMemberCount(name, value); n != 0 {
 		t.Fatalf("kick后成员数=%d, want 0", n)
 	}
 
 	channel.Join(p, name, value)
-	CookiesUpdate(values.Metadata{leaveKey: ""}, p, 0)
+	CookiesUpdate(values.Metadata{leaveKey: ""}, p, 0, "")
 	if n := channelMemberCount(name, value); n != 0 {
 		t.Fatalf("leave后成员数=%d, want 0", n)
 	}
@@ -221,7 +221,7 @@ func TestCookiesUpdateJoinAfterUidLanding(t *testing.T) {
 	CookiesUpdate(values.Metadata{
 		gwcfg.ServiceMetadataUID:                             "3002",
 		gwcfg.ServicePlayerChannelJoin + context.ChannelNameEncode("cu", "r1"): "",
-	}, p, 0)
+	}, p, 0, "")
 
 	if p.GetString(gwcfg.ServiceMetadataUID) != "3002" {
 		t.Fatal("uid 应已落地")
@@ -235,7 +235,7 @@ func TestCookiesUpdateJoinAfterUidLanding(t *testing.T) {
 	//入房身份必须真是新uid:以新身份 Leave 应能正常退出
 	CookiesUpdate(values.Metadata{
 		gwcfg.ServicePlayerChannelLeave + context.ChannelNameEncode("cu", "r1"): "",
-	}, p, 0)
+	}, p, 0, "")
 	if n := channelMemberCount("cu", "r1"); n != 0 {
 		t.Fatalf("以新身份 Leave 失败,成员数=%d", n)
 	}

@@ -13,7 +13,12 @@ import (
 	"github.com/hwcer/logger"
 )
 
-func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32) {
+// CookiesUpdate 把业务回包/推送 metadata 中的白名单键落到会话,并执行频道命令。
+//
+// expectUID 为推送路径的身份基线(service.send 按其查表):非空时走
+// players.UpdateExpect 做锁内基线校验,会话 uid 已翻变则丢弃 uid 键——推送只投递、
+// 不变更身份;请求/响应路径传空串,选角/换角的 uid 落地必须照常走 rebind 维护会话表。
+func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32, expectUID string) {
 	vs := values.Values{}
 	if i > 0 {
 		vs[gwcfg.ServiceMetadataRequestId] = i
@@ -56,7 +61,11 @@ func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32) {
 		}
 	}
 	if len(vs) > 0 {
-		players.Update(p, vs) //uid 变更(首次选角/换角)时同步维护会话表(键=uid)
+		if expectUID == "" {
+			players.Update(p, vs) //请求路径:uid 变更(首次选角/换角)时同步维护会话表(键=uid)
+		} else {
+			players.UpdateExpect(p, vs, expectUID) //推送路径:身份基线校验,只投递不变更身份
+		}
 	}
 	for _, c := range cmds {
 		switch c.kind {

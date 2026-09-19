@@ -47,8 +47,7 @@ func Create(guid string, value values.Values) (token string, data *session.Data,
 func Update(p *session.Data, vs values.Values) {
 	if p == nil || len(vs) == 0 {
 		return
-	}
-	// 换角时旧角色要走一遍**模拟登出**(仅网关层面触发事件):在 uid 翻转之前、
+	}	// 换角时旧角色要走一遍**模拟登出**(仅网关层面触发事件):在 uid 翻转之前、
 	// 以旧身份补一发掉线事件——业务侧监听 EventSessionDisconnect,按事件时刻
 	// 会话上的 uid 感知旧角色下线,与真实掉线同一条路。连接与会话都保留给新角色;
 	// 旧角色的表项摘除、频道清理由随后的 rebind 完成(相当于真实登出时 Release
@@ -74,6 +73,27 @@ func Update(p *session.Data, vs values.Values) {
 	if uid != old {
 		rebind(p, old, uid)
 	}
+}
+
+// UpdateExpect 推送路径的会话数据更新：expectUID 为调用方定位会话时依据的 uid 基线。
+//
+// 推送从定位到落地之间隔着换角/顶号窗口：会话可能已翻到新角色或被清空身份。
+// 锁内发现会话当前 uid 已不等于基线时，丢弃 vs 中的 uid 键、只应用其余 cookies——
+// **推送只投递、不变更身份**：既不能把会话翻回旧角色（在飞推送 vs 换角 rebind 的
+// 竞态会让网关与业务服身份分叉），也不能在顶号窗口帮被顶掉的僵尸会话经 rebind
+// 夺回表项、把新端置入只收不发。
+//
+// 基线校验必须在会话锁内做：锁外读到的 uid 与落地之间同样隔着并发窗口，等于没校验。
+func UpdateExpect(p *session.Data, vs values.Values, expectUID string) {
+	if p == nil || len(vs) == 0 {
+		return
+	}
+	p.Mutex(func(setter session.Setter) {
+		if setter.GetString(gwcfg.ServiceMetadataUID) != expectUID {
+			delete(vs, gwcfg.ServiceMetadataUID)
+		}
+		setter.Update(vs)
+	})
 }
 
 // rebind uid 变化(首次选角/换角)时维护会话表。uid 由调用方在会话锁内读好传入。

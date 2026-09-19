@@ -156,7 +156,7 @@ func forward(proxy inbound, path string) (reply []byte, err error) {
 				return nil, err
 			}
 		}
-		CookiesUpdate(res, p, proxy.Index())
+		CookiesUpdate(res, p, proxy.Index(), "") //请求路径:选角/换角的 uid 落地必须照常走 rebind
 	}
 	//Response 排在登录/登出之后:钩子里 c.Session() 要读到这次新建的会话
 	return response(proxy, servicePath, serviceMethod, reply, res)

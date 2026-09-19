@@ -58,7 +58,8 @@ func send(c *cosrpc.Context) any {
 			return nil
 		}
 		//会话数据该更新还是要更新,与这条消息最终投给谁无关(path 为空时更是"只设置信息,不发送")
-		CookiesUpdate(mate, p, 0)
+		//uid 同时是身份基线:定位到落地之间会话可能已换角/被顶,基线不符时只投递、不回写身份
+		CookiesUpdate(mate, p, 0, uid)
 	}
 
 	sock := resolveTarget(p, socketId)
