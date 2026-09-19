@@ -9,6 +9,7 @@ import (
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosrpc/redis"
 	"github.com/hwcer/gateway/gwcfg"
+	"github.com/hwcer/gateway/players"
 
 	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/scc"
@@ -88,6 +89,9 @@ func (this *Module) Start() (err error) {
 	if err = redis.Start(); err != nil {
 		return
 	}
+	//掉线会话清理器:TCP 掉线只解绑 socket 不产生 Release,Redis 后端下表项与
+	//频道成员会永久滞留——定期清扫是双后端行为对齐的最后一块
+	players.StartSweeper()
 	if gwcfg.Options.Gate.Protocol.CMux() {
 		var ln net.Listener
 		if ln, err = net.Listen("tcp", gwcfg.Options.Gate.Address); err != nil {
