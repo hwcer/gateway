@@ -1,9 +1,6 @@
 package gwcfg
 
-import (
-	"strings"
-	"sync"
-)
+import "strings"
 
 const (
 	ServiceMetadataUID        = "uid"
@@ -37,19 +34,15 @@ const (
 )
 
 // metadataReservedExtra 业务层追加的保留键黑名单(经 AddMetadataReserved 设置)
-var (
-	metadataReservedMu    sync.RWMutex
-	metadataReservedExtra = map[string]struct{}{}
-)
+var metadataReservedExtra = map[string]struct{}{}
 
 // AddMetadataReserved 业务层追加禁止客户端 query 注入的保留键。
 //
 // 系统内置保留键已默认禁止(见 MetadataReserved);业务自定义的受信键——
 // 凡是网关/业务服会**信任其值**的 metadata(自有身份、权限、路由类键)——
-// 在此加入黑名单,客户端 query 传了也会被丢弃。启动期调用,支持运行期追加。
+// 在此加入黑名单,客户端 query 传了也会被丢弃。
+// 🔴 契约:启动期调用(服务开始受理请求前),不做并发防护
 func AddMetadataReserved(keys ...string) {
-	metadataReservedMu.Lock()
-	defer metadataReservedMu.Unlock()
 	for _, k := range keys {
 		metadataReservedExtra[k] = struct{}{}
 	}
@@ -75,8 +68,6 @@ func MetadataReserved(k string) bool {
 	if strings.HasPrefix(k, ServicePlayerSelector) {
 		return true
 	}
-	metadataReservedMu.RLock()
-	defer metadataReservedMu.RUnlock()
 	_, ok := metadataReservedExtra[k]
 	return ok
 }
