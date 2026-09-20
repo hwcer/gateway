@@ -3,11 +3,11 @@ module github.com/hwcer/gateway
 go 1.26.0
 
 require (
-	github.com/hwcer/cosgo v1.8.4-0.20260919102425-6870e4a274cc
-	github.com/hwcer/cosnet v1.4.5-0.20260919105318-b3d2ea54dbe3
-	github.com/hwcer/cosrpc v1.4.3-0.20260912010641-a3f2ce8f6bc5
-	github.com/hwcer/cosweb v1.4.3-0.20260912010644-a01b16e4fb97
-	github.com/hwcer/coswss v0.4.3-0.20260912010938-4b30a1193e57
+	github.com/hwcer/cosgo v1.8.4-0.20260919110810-2edf985e2b30
+	github.com/hwcer/cosnet v1.4.5-0.20260919134144-b3167a80f1cb
+	github.com/hwcer/cosrpc v1.4.3-0.20260919131230-b06927f4b7d9
+	github.com/hwcer/cosweb v1.4.3-0.20260919130730-3a8ca3a6132d
+	github.com/hwcer/coswss v0.4.3-0.20260919124110-4afe71b0b891
 	github.com/hwcer/logger v0.2.9-0.20260910161556-c8faab738be9
 	go.mongodb.org/mongo-driver/v2 v2.7.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
