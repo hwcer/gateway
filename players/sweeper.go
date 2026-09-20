@@ -30,8 +30,9 @@ var Sweeper = struct {
 }{Interval: 60, Grace: 300}
 
 // sweeperLastOffline 断线时刻记录:会话指针 → 断线时间。
-// 会话重连(Replace 回写 socket)或被清理时移除;Map 不随会话数量收缩,
-// 但条目数 ≤ 历史断线会话中被复用的数量,量级可控
+// 会话重连(Replace 回写 socket)、被清理、被换出(rebind 的 Swap)时移除;
+// 🔴 若无 rebind 换出清理,Redis 后端每次重连都产生新副本,旧副本的登记条目
+// 永久残留(不再被 Range 扫到),随进程生命周期无界增长
 var sweeperLastOffline sync.Map // map[*session.Data]time.Time
 
 func init() {
@@ -90,12 +91,12 @@ func sweep() {
 		} else {
 			logger.Debug("sweeper release offline session(never selected)")
 		}
-		if ss := session.New(p); ss.Data != nil {
-			//会话级 Delete:清存储键、触发 EventSessionRelease(gateway.release 摘表项+频道)
-			_ = ss.Delete()
-		} else {
-			//兜底:存储不可用等异常时至少清网关侧状态
-			players.Delete(p)
+		//会话级 Delete:清存储键、触发 EventSessionRelease(release 钩子摘表项+频道)。
+		//🔴 Delete 失败(存储不可用等)不得静默吞掉:表项与频道残留在网关侧,
+		//补包级 Delete(CAS 摘表项+关连接)与频道释放兜底,存储键由 TTL 到期
+		if err := session.New(p).Delete(); err != nil {
+			logger.Alert("sweeper session delete error: %v", err)
+			Delete(p)
 			channel.Release(p)
 		}
 		sweeperLastOffline.Delete(p)

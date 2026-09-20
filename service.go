@@ -6,7 +6,6 @@ import (
 
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet/message"
-	"github.com/hwcer/gateway/channel"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -55,10 +54,19 @@ func send(c *cosrpc.Context) any {
 	}
 	if p != nil {
 		if _, ok := mate[gwcfg.ServicePlayerLogout]; ok {
-			//业务标记的登出推送:与 HTTP logout 同强度语义——频道身份一并释放,
-			//只靠 players.Delete 会把频道成员滞留到 sweeper 兜底
-			channel.Release(p)
-			players.Delete(p)
+			//业务标记的登出推送:走标准会话 Delete——存储删除+EventSessionRelease
+			//(release 钩子摘表项+频道释放),与 HTTP logout 同强度;旧实现只
+			//channel.Release+players.Delete,存储键与登出事件双双缺失,token 复活。
+			//🔴 基线校验:定位到落地之间会话可能已换角/被顶,陈旧会话的登出指令
+			//不得把新持有者登出(与 CookiesUpdate 的 expectUID 同一攻击面);
+			//锁内读后再 Delete 仍有微窗,release 钩子的 CAS 摘表再兜一层
+			if players.UIDIs(p, uid) {
+				if err := session.New(p).Delete(); err != nil {
+					logger.Alert("player logout delete error: %v", err)
+				}
+			} else {
+				logger.Alert("player logout dropped, session uid changed, expect:%s", uid)
+			}
 			return nil
 		}
 		//会话数据该更新还是要更新,与这条消息最终投给谁无关(path 为空时更是"只设置信息,不发送")

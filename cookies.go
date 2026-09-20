@@ -37,6 +37,10 @@ func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32, expectUID s
 		kind  byte //j:Join l:Leave k:Kick
 	}
 	var cmds []channelCmd
+	//推送路径的身份基线先行:会话 uid 已翻变(换角/被顶)时,频道命令一并丢弃——
+	//Join/Kick 会以会话当前(新)身份变更频道归属、Kick 作用于现表,与
+	//"推送只投递、不变更身份"的口径冲突(UpdateExpect 内的锁内校验仍保留作防线)
+	baselineOK := expectUID == "" || players.UIDIs(p, expectUID)
 	for k, v := range cookie {
 		if s, ok := strings.CutPrefix(k, gwcfg.ServicePlayerChannelJoin); ok {
 			if name, value, err := context.ChannelNameParse(s); err == nil {
@@ -66,6 +70,9 @@ func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32, expectUID s
 		} else {
 			players.UpdateExpect(p, vs, expectUID) //推送路径:身份基线校验,只投递不变更身份
 		}
+	}
+	if !baselineOK {
+		cmds = nil //基线不符:频道命令整体丢弃,cookies(_rid 等)仍照常应用
 	}
 	for _, c := range cmds {
 		switch c.kind {

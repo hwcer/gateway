@@ -163,8 +163,14 @@ func rebind(p *session.Data, oldUID, uid string) {
 			//不许 Replaced 自己、也不许清自己的 uid 与频道身份。
 			//判等依据是实例标识而非 Data.id:Redis 后端 id=guid,同 guid 会话的
 			//id 恒等,旧判等恒真,supersede 被跳过,双设备短窗共享同一角色
-			if os, _ := prev.(*session.Data); os != nil && !sameInstance(os, p) {
-				displaced = os
+			if os, _ := prev.(*session.Data); os != nil {
+				//🔴 被换出的副本从此不再被 sweeper 扫到(表项已指向新会话),
+				//它的断线登记随手清掉,否则条目随"断线后被复用"的会话数
+				//缓慢累积(Redis 后端每次重连都产生新副本,是常态路径)
+				sweeperLastOffline.Delete(os)
+				if !sameInstance(os, p) {
+					displaced = os
+				}
 			}
 		}
 	}
@@ -187,10 +193,32 @@ func rebind(p *session.Data, oldUID, uid string) {
 }
 
 // sameInstance 判断两个会话是否为同一客户端实例:比对实例标识而非 Data.id
-// (Redis 后端同 guid 会话 id 恒等)。标识缺失(升级前的旧会话)按不同实例处理
+// (Redis 后端同 guid 会话 id 恒等)。标识缺失(升级前的旧会话)按不同实例处理。
+// 🔴 读必须进会话锁:标识本身在 Create/Verify 后不再变更,但 values 是并发写的
+// (supersede 清 uid 等),cosgo 的 Data 读操作不带锁——锁外裸读是数据竞争
+// (-race 实报,TestRebindConcurrentSameUID)。两把锁顺序获取、不同时持有,无死锁面
 func sameInstance(a, b *session.Data) bool {
-	ia := a.GetString(instanceKey)
-	return ia != "" && ia == b.GetString(instanceKey)
+	var ia, ib string
+	a.Mutex(func(s session.Setter) {
+		ia = s.GetString(instanceKey)
+	})
+	b.Mutex(func(s session.Setter) {
+		ib = s.GetString(instanceKey)
+	})
+	return ia != "" && ia == ib
+}
+
+// UIDIs 会话当前 uid 是否等于基线(锁内读)。推送路径据此判定"定位到落地之间
+// 身份是否已翻变",翻变时不得再执行变更身份/频道的命令
+func UIDIs(p *session.Data, uid string) bool {
+	if p == nil || uid == "" {
+		return false
+	}
+	var cur string
+	p.Mutex(func(s session.Setter) {
+		cur = s.GetString(gwcfg.ServiceMetadataUID)
+	})
+	return cur == uid
 }
 
 // supersede 新会话接管 uid 时对老会话的处置:
