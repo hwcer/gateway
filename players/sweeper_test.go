@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/hwcer/cosgo/session"
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosnet"
 	"github.com/hwcer/cosnet/tcp"
+	"github.com/hwcer/gateway/gwcfg"
 )
 
 // wireReleaseHook 单测环境没有 cosgo 生命周期,手动挂 release 钩子
@@ -139,5 +141,33 @@ func newSweeperTestSocket(t *testing.T, ss *cosnet.Sockets) (*cosnet.Socket, fun
 	return sock, func() {
 		_ = client.Close()
 		_ = ln.Close()
+	}
+}
+
+// TestSweeperRequestKeepsHTTPSessionAlive 🔴 无 socket 会话(HTTP)以请求为活性:
+// 断线登记后只要仍有请求到达(Update 路径),登记必须被清——sweeper 只清
+// "既无连接又无请求"的真僵尸。旧实现只看 socket,活跃 HTTP 玩家会在
+// Grace+Interval 后被当僵尸强清。
+func TestSweeperRequestKeepsHTTPSessionAlive(t *testing.T) {
+	setup(t)
+	p := newPlayer(t, "g-http")
+	selectUID(p, "9201") //HTTP 形态:不绑 socket,表项会话恒无连接
+
+	//首轮扫描:登记断线
+	sweep()
+	if _, ok := sweeperLastOffline.Load(p); !ok {
+		t.Fatal("前提:无 socket 会话应被登记断线")
+	}
+
+	//请求到达(带同值 uid 的常规响应路径):登记必须被清
+	Update(p, values.Values{gwcfg.ServiceMetadataUID: "9201", "any": "cookie"})
+	if _, ok := sweeperLastOffline.Load(p); ok {
+		t.Fatal("请求到达后断线登记必须被清,否则活跃 HTTP 会话被当僵尸清理")
+	}
+
+	//清掉登记后再扫:仍在宽限内,不得被清理(表项保留)
+	sweep()
+	if Get("9201") != p {
+		t.Fatal("活跃会话不得被 sweeper 清理")
 	}
 }

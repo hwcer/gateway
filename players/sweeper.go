@@ -85,6 +85,22 @@ func sweep() {
 		} else if now.Sub(t.(time.Time)) < grace {
 			return true //重连窗口内,保留
 		}
+		//🔴 删除前复检:从上面判死到这里隔着整个扫描迭代,密钥重连可能恰好
+		//插进这个窗口——Redis 后端重连是"Verify 还原新副本+rebind 换表项+Replace
+		//回写 socket",共享同一条存储记录。不复查就把刚回线玩家的记录删掉、
+		//频道踢出(表项 CAS 幸免,但记录没了下个请求就踢回登录)。复检两个判据:
+		//表项已指向别的会话(重连副本/接管者)或 socket 已回绑,任一命中即作废
+		//本次判死,登记清掉下轮重扫
+		if uid := p.GetString(gwcfg.ServiceMetadataUID); uid != "" {
+			if cur := Get(uid); cur != nil && cur != p {
+				sweeperLastOffline.Delete(p)
+				return true
+			}
+		}
+		if sock := Socket(p); sock != nil && sock.CanWrite() {
+			sweeperLastOffline.Delete(p)
+			return true
+		}
 		//超时:走标准 Release(EventSessionRelease → release 钩子:摘表项+频道释放)
 		if uid := p.GetString(gwcfg.ServiceMetadataUID); uid != "" {
 			logger.Debug("sweeper release offline session, uid:%s", uid)

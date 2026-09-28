@@ -74,17 +74,18 @@ func TestRebindTakeoverSupersedesHolder(t *testing.T) {
 	if _, ok := channel.NewSetter(pa).Get("tk"); ok {
 		t.Fatal("被接管会话的频道身份未释放")
 	}
-	written := false
+	//🔴 同账号接管(账号=存储键,A/B 共享一条记录)**不得**写穿清 uid:
+	//rebind 里新持有者的 uid 写穿在前,这里再写空会覆盖人家——双设备顶号后
+	//新端一重连就变未选角。清内存副本即可(表项已换人,旧连接不得再以旧 uid 行动)。
+	//跨账号接管的写穿语义由 TestRedisSupersedeClearsUidInStorage(真 Redis)钉住。
 	rs.mu.Lock()
 	for _, u := range rs.updates {
 		if v, ok := u[gwcfg.ServiceMetadataUID]; ok && v == "" {
-			written = true
+			rs.mu.Unlock()
+			t.Fatal("同账号接管的 uid 清空不得写穿存储,否则覆盖新持有者刚落的 uid")
 		}
 	}
 	rs.mu.Unlock()
-	if !written {
-		t.Fatal("uid 清除必须写穿存储(Redis 后端一致性)")
-	}
 }
 
 // TestRebindSameSessionNotSuperseded Redis 后端重连还原出同 id 新实例:

@@ -89,6 +89,14 @@ func Update(p *session.Data, vs values.Values) {
 		rebind(p, old, uid)
 	}
 	writeThrough(p, vs)
+	//HTTP 无长连接,活性以请求为准:每请求清一次表项会话的断线登记,sweeper 的
+	//"断线计时"由此感知短连接的心跳/请求,活跃的 HTTP 玩家不会被当僵尸清掉
+	//(Redis 后端表项副本不随请求更新,不清登记的话 sweeper 只看 socket 误判离线)
+	if uid != "" {
+		if cur := Get(uid); cur != nil {
+			sweeperLastOffline.Delete(cur)
+		}
+	}
 }
 
 // UpdateExpect 推送路径的会话数据更新：expectUID 为调用方定位会话时依据的 uid 基线。
@@ -232,11 +240,15 @@ func UIDIs(p *session.Data, uid string) bool {
 //	掉线通知因 uid 为空自然跳过,也不会误删新会话刚接手的频道成员。
 //
 // 老会话的表项不用显式摘:rebind 的 Swap 已经把它换成了新会话。
-// uid 清除必须**写穿存储**(Session 层脏键机制,存空串与删除等价):Redis 后端
-// 每次 Verify 都从存储新建副本,只改内存的话被接管会话的存储里 uid 仍在,
-// 它持 secret 重连会还原出带 uid 的副本并经 rebind 重新夺回角色,与内存后端
-// 相悖(内存后端单实例,改内存即改存储)。内存后端的 Storage.Update 是 no-op,
-// 行语义不变。
+//
+// 🔴 uid 清除**只落内存副本,不写穿存储**:
+//   - 顶号的前提是同账号(角色归属账号,跨账号选角在业务层被归属校验拦死,
+//     网关侧结构上不可达)。而账号=存储键:同 guid 会话共享一条记录,rebind 里
+//     新持有者的 uid 写穿在前,这里再写空会把人家刚落的 uid 覆盖掉——双设备
+//     顶号后新端一重连就变未选角。
+//   - 被顶者夺回的防护不靠清 uid:接管者的登录 Create 已 DEL+HMSET 重建记录,
+//     旧 secret 必然 Verify 失效,旧端连还原都还原不出来。
+//   - 内存后端 Update 即存储本体(单实例),清内存等于清存储,原语义自然保留。
 // ⚠️ 本函数运行时**不持有任何会话锁**(sock.Replaced 会同步 Emit 走业务下发逻辑,
 // 塞进 p.Mutex 里迟早撞上重入死锁,与旧 negotiate 的约束一致)。
 func supersede(old *session.Data, uid string, neo *session.Data) {
@@ -247,11 +259,11 @@ func supersede(old *session.Data, uid string, neo *session.Data) {
 		}
 		sock.Replaced(ip)
 	}
-	ss := session.New(old)
-	ss.Update(values.Values{gwcfg.ServiceMetadataUID: ""})
-	ss.Submit()
+	//只清内存副本(它已不在表内,防止旧连接后续以旧 uid 行动),不 Submit 写穿
+	session.New(old).Update(values.Values{gwcfg.ServiceMetadataUID: ""})
 	channel.SwitchUID(old, uid)
 }
+
 
 // Get 按角色ID取在线会话,不在线返回 nil
 func Get(uid string) *session.Data {

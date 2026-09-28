@@ -105,13 +105,19 @@ func TestRedisDoubleReconnect(t *testing.T) {
 
 // TestRedisSupersedeClearsUidInStorage 被接管会话的 uid 清除必须写穿存储:
 // Redis 后端每次 Verify 都从存储新建副本,只清内存的话它持 secret 重连会
-// 还原出带 uid 的副本并经 rebind 夺回角色。正确行为:重连落地为未选角状态。
-func TestRedisSupersedeClearsUidInStorage(t *testing.T) {
+// 被接管会话不得夺回角色——🔴 但机制不是"清 uid 写穿",而是同账号模型下
+// 接管者的登录 Create 已 DEL+HMSET 重建共享记录(账号=存储键):被顶者的旧
+// secret 必然 Verify 失效,连还原都还原不出来。supersede 只清内存副本,
+// 不写穿——写穿反而会把新持有者刚落的 uid 覆盖成空(见
+// TestRedisSameGuidTakeoverKeepsNewHolderUid)。旧版用不同 guid 构造"跨账号
+// 接管"来断言写穿,那是业务层归属校验拦死的不可达路径,测的是幽灵语义。
+func TestRedisSupersedeOldTokenRevoked(t *testing.T) {
 	setupRedisTests(t)
 	ss := TCP.Sockets
+	const guid = "g-redis-sup"
 	const uid = "9101"
 
-	tokenA, _, err := players.Create("g-redis-sup-a", values.Values{})
+	tokenA, _, err := players.Create(guid, values.Values{})
 	if err != nil {
 		t.Fatalf("create A error:%v", err)
 	}
@@ -126,8 +132,8 @@ func TestRedisSupersedeClearsUidInStorage(t *testing.T) {
 		t.Fatal("前提:A 选角后应入表")
 	}
 
-	//B(另一账号)接管同一角色 → supersede(A)
-	_, pb, err := players.Create("g-redis-sup-b", values.Values{})
+	//B 同账号登录并接管同一角色 → supersede(A)
+	_, pb, err := players.Create(guid, values.Values{})
 	if err != nil {
 		t.Fatalf("create B error:%v", err)
 	}
@@ -136,32 +142,24 @@ func TestRedisSupersedeClearsUidInStorage(t *testing.T) {
 		t.Fatal("前提:B 应已接管")
 	}
 
-	//从存储还原 A:uid 必须已清空(空即未选角),不得经 rebind 夺回角色
-	//⚠️ 用 A 重连后的现役 token——Reconnect 的 Refresh 已作废初始 token
+	//A 的旧 token(含重连后 Refresh 的现役 token)必须已随记录重建而失效
 	tokenA2, err := session.New(pa).Token()
 	if err != nil {
 		t.Fatalf("token error:%v", err)
 	}
-	s := session.New()
-	if err = s.Verify(tokenA2); err != nil {
-		t.Fatalf("A 的 token 必须仍可还原:%v", err)
-	}
-	if got := s.Data.GetString(gwcfg.ServiceMetadataUID); got != "" {
-		t.Fatalf("A 的 uid 清除必须写穿存储,存储里仍是 %q", got)
+	if err = session.New().Verify(tokenA2); err == nil {
+		t.Fatal("被顶者的旧 secret 必须失效(Create 重建共享记录),否则夺回防护失效")
 	}
 
-	//A 持 secret 重连:落地为未选角,角色仍归 B
+	//旧 token 重连直接被拒,不存在"还原出带 uid 的副本"这条夺回路径
 	sockC, stopC := newReplacedTestSocket(t, ss)
 	defer stopC()
-	pc, err := players.Reconnect(sockC, tokenA2)
-	if err != nil {
-		t.Fatalf("A 重连失败:%v", err)
+	if _, err = players.Reconnect(sockC, tokenA2); err == nil {
+		t.Fatal("被顶者持旧 secret 重连必须被拒")
 	}
-	if got := pc.GetString(gwcfg.ServiceMetadataUID); got != "" {
-		t.Fatalf("被接管会话重连后必须为未选角状态,拿到 %q", got)
-	}
+	//角色仍归 B,存储记录的 uid 也仍是 B 的
 	if players.Get(uid) != pb {
-		t.Fatal("重连不得夺回已被接管的角色")
+		t.Fatal("角色归属必须保持为接管者")
 	}
 }
 
@@ -207,4 +205,48 @@ func TestRedisRebindUidSurvivesStorageRoundTrip(t *testing.T) {
 		t.Fatal("重连后表项必须指向还原的新实例")
 	}
 	_ = pa
+}
+
+// TestRedisSameGuidTakeoverKeepsNewHolderUid 🔴 同账号双设备顶号(账号=存储键,
+// 同 guid 会话共享一条记录):接管者的 uid 写穿**不得**被 supersede 的清空写穿覆盖。
+// 旧实现 supersede 无条件 Submit,把新持有者刚落的 uid 盖成空串——双设备顶号后
+// 新端一重连/Verify 即落地为未选角。跨账号场景仍写穿(见 TestRedisSupersedeClearsUidInStorage)。
+func TestRedisSameGuidTakeoverKeepsNewHolderUid(t *testing.T) {
+	setupRedisTests(t)
+	const guid = "g-redis-same"
+	const uid = "9102"
+
+	tokenA, _, err := players.Create(guid, values.Values{})
+	if err != nil {
+		t.Fatalf("create A error:%v", err)
+	}
+	sockA, stopA := newReplacedTestSocket(t, TCP.Sockets)
+	defer stopA()
+	if _, err = players.Reconnect(sockA, tokenA); err != nil {
+		t.Fatalf("reconnect A error:%v", err)
+	}
+	pa := sockA.Data()
+	players.Update(pa, values.Values{gwcfg.ServiceMetadataUID: uid})
+	if players.Get(uid) != pa {
+		t.Fatal("前提:A 选角后应入表")
+	}
+
+	//B 同账号登录并接管同一角色
+	tokenB, pb, err := players.Create(guid, values.Values{})
+	if err != nil {
+		t.Fatalf("create B error:%v", err)
+	}
+	players.Update(pb, values.Values{gwcfg.ServiceMetadataUID: uid})
+	if players.Get(uid) != pb {
+		t.Fatal("前提:B 应已接管")
+	}
+
+	//存储记录(账号=键)的 uid 必须仍是 B 刚写的值——supersede 不得覆盖
+	s := session.New()
+	if err = s.Verify(tokenB); err != nil {
+		t.Fatalf("B 的 token 必须可还原:%v", err)
+	}
+	if got := s.Data.GetString(gwcfg.ServiceMetadataUID); got != uid {
+		t.Fatalf("同账号接管后存储 uid 被覆盖成 %q,新持有者重连将变未选角(want %q)", got, uid)
+	}
 }
