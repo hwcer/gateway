@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/hwcer/gateway/channel"
-	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -43,19 +42,19 @@ func CookiesUpdate(cookie values.Metadata, p *session.Data, i int32, expectUID s
 	baselineOK := expectUID == "" || players.UIDIs(p, expectUID)
 	for k, v := range cookie {
 		if s, ok := strings.CutPrefix(k, gwcfg.ServicePlayerChannelJoin); ok {
-			if name, value, err := context.ChannelNameParse(s); err == nil {
+			if name, value, err := gwcfg.Channel.Parse(s); err == nil {
 				cmds = append(cmds, channelCmd{name: name, value: value, kind: 'j'})
 			} else {
 				logger.Debug("channel Join metadata parse error:%v", err)
 			}
 		} else if s, ok := strings.CutPrefix(k, gwcfg.ServicePlayerChannelLeave); ok {
-			if name, value, err := context.ChannelNameParse(s); err == nil {
+			if name, value, err := gwcfg.Channel.Parse(s); err == nil {
 				cmds = append(cmds, channelCmd{name: name, value: value, kind: 'l'})
 			} else {
 				logger.Debug("channel Leave metadata parse error:%v", err)
 			}
 		} else if s, ok := strings.CutPrefix(k, gwcfg.ServicePlayerChannelKick); ok {
-			if name, value, err := context.ChannelNameParse(s); err == nil {
+			if name, value, err := gwcfg.Channel.Parse(s); err == nil {
 				cmds = append(cmds, channelCmd{uid: v, name: name, value: value, kind: 'k'})
 			} else {
 				logger.Debug("channel Kick metadata parse error:%v", err)

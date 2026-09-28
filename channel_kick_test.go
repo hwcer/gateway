@@ -6,7 +6,6 @@ import (
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/gateway/channel"
-	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 )
@@ -129,9 +128,9 @@ func TestCookiesUpdateChannelCommands(t *testing.T) {
 	defer players.Delete(p)
 
 	name, value := "cookietest", "r1"
-	joinKey := gwcfg.ServicePlayerChannelJoin + context.ChannelNameEncode(name, value)
-	leaveKey := gwcfg.ServicePlayerChannelLeave + context.ChannelNameEncode(name, value)
-	kickKey := gwcfg.ServicePlayerChannelKick + context.ChannelNameEncode(name, value)
+	joinKey := gwcfg.ServicePlayerChannelJoin + gwcfg.Channel.Format(name, value)
+	leaveKey := gwcfg.ServicePlayerChannelLeave + gwcfg.Channel.Format(name, value)
+	kickKey := gwcfg.ServicePlayerChannelKick + gwcfg.Channel.Format(name, value)
 
 	CookiesUpdate(values.Metadata{joinKey: ""}, p, 0, "")
 	if n := channelMemberCount(name, value); n != 1 {
@@ -219,8 +218,8 @@ func TestCookiesUpdateJoinAfterUidLanding(t *testing.T) {
 
 	//换角 + Join 同包
 	CookiesUpdate(values.Metadata{
-		gwcfg.ServiceMetadataUID:                             "3002",
-		gwcfg.ServicePlayerChannelJoin + context.ChannelNameEncode("cu", "r1"): "",
+		gwcfg.ServiceMetadataUID: "3002",
+		gwcfg.ServicePlayerChannelJoin + gwcfg.Channel.Format("cu", "r1"): "",
 	}, p, 0, "")
 
 	if p.GetString(gwcfg.ServiceMetadataUID) != "3002" {
@@ -234,7 +233,7 @@ func TestCookiesUpdateJoinAfterUidLanding(t *testing.T) {
 	}
 	//入房身份必须真是新uid:以新身份 Leave 应能正常退出
 	CookiesUpdate(values.Metadata{
-		gwcfg.ServicePlayerChannelLeave + context.ChannelNameEncode("cu", "r1"): "",
+		gwcfg.ServicePlayerChannelLeave + gwcfg.Channel.Format("cu", "r1"): "",
 	}, p, 0, "")
 	if n := channelMemberCount("cu", "r1"); n != 0 {
 		t.Fatalf("以新身份 Leave 失败,成员数=%d", n)

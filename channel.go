@@ -3,7 +3,6 @@ package gateway
 import (
 	"github.com/hwcer/cosnet/message"
 	"github.com/hwcer/gateway/channel"
-	"github.com/hwcer/gateway/context"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/gateway/players"
 
@@ -42,7 +41,7 @@ func (this channelHandle) Broadcast(c *cosrpc.Context) any {
 		logger.Debug("频道名不能为空")
 		return nil
 	}
-	name, value, err := context.ChannelNameParse(s)
+	name, value, err := gwcfg.Channel.Parse(s)
 	if err != nil {
 		return err
 	}
@@ -65,7 +64,7 @@ func (this channelHandle) Delete(c *cosrpc.Context) any {
 		logger.Debug("频道名不能为空")
 		return nil
 	}
-	name, value, err := context.ChannelNameParse(s)
+	name, value, err := gwcfg.Channel.Parse(s)
 	if err != nil {
 		return err
 	}
@@ -97,7 +96,7 @@ func (this channelHandle) Kick(c *cosrpc.Context) any {
 		logger.Debug("频道名不能为空")
 		return nil
 	}
-	name, value, err := context.ChannelNameParse(s)
+	name, value, err := gwcfg.Channel.Parse(s)
 	if err != nil {
 		return err
 	}
