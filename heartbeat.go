@@ -1,11 +1,11 @@
 package gateway
 
 import (
-	"github.com/hwcer/gateway/context"
 	"time"
 
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/values"
+	"github.com/hwcer/gateway/errors"
 	"github.com/hwcer/gateway/gwcfg"
 	"github.com/hwcer/logger"
 )
@@ -18,20 +18,28 @@ import (
 // 业务侧只好在别的请求上补 keepalive。所以没配 G2SHeartbeat 时按客户端心跳包名原样投递，
 // 而不是退化成"不转发"。
 //
-// ⚠️ 未选角不转发：那时业务服没有玩家对象可刷，而且心跳走默认的 Player 档，
-// 转过去也只会被 Access 回 ErrNotSelectRole——白跑一次 RPC。未选角的连接由网关自己保活。
+// ⚠️ 未选角不转发：那时业务服没有玩家对象可刷。
+// 🔴 转发必须走私有 forward（带 Access.Verify）而不是公开 Forward（裸转发）：
+// 之前只查 session UID 非空就 Forward，转发出去的 metadata 没有 uid/permission，
+// 业务服按 None 档裸进 handler——c.Player 恒 nil，解引用即 panic
+// （2026-10-14 heartbeat 实际发生过）。forward 会按 Player 档注入
+// uid/guid/socketId/permission（业务服框架正常挂玩家、自动 KeepAlive），
+// 未选角在 Verify 处就被 ErrNotSelectRole 拦下、由网关自己应答。
 // ⚠️ 转发失败降级为网关应答，不把错误抛给客户端：业务服一抖动，全服连接不该跟着掉。
-func heartbeat(c context.Context) any {
+func heartbeat(c inbound) any {
 	if h, ok := Setting.Handler.(C2SHeartbeat); ok {
 		return h.C2SHeartbeat(c)
 	}
 	p := c.Session() //GetString 不是 nil-safe,必须先判空
 	if Setting.G2SHeartbeat != "" && p != nil && p.GetString(gwcfg.ServiceMetadataUID) != "" {
-		reply, err := Forward(c, Setting.G2SHeartbeat)
+		reply, err := forward(c, Setting.G2SHeartbeat)
 		if err == nil {
-			return reply //Response 已由 Forward 过完
+			return reply //Response 已由 forward 过完
 		}
-		logger.Debug("心跳转发失败,path:%v,err:%v", Setting.G2SHeartbeat, err)
+		//未选角（ErrNotSelectRole）是常态降级：网关自己应答即可，不算错误
+		if err.Error() != errors.ErrNotSelectRole.Error() {
+			logger.Debug("心跳转发失败,path:%v,err:%v", Setting.G2SHeartbeat, err)
+		}
 	}
 	//网关自己应答:回服务器时间戳。与 reconnect 一样用 values.Message{Code,Data} 这个
 	//框架层的通用回包结构,而不是裸数字——业务层的 Serialize 认得出"成功且带数据"。
